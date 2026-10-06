@@ -52,7 +52,16 @@ async fn main() -> Result<()> {
         let query_params = QueryPointsBuilder::new(COLLECTION_NAME).with_payload(true);
         let vector_store = QdrantVectorStore::new(qdrant, embedding_model, query_params.build());
 
-        vector_store.insert_documents(embeddings).await?;
+        println!("Inserting into the vector store");
+
+        let mut progress = 0;
+        for embeddings_page in embeddings.chunks(100) {
+            progress += embeddings_page.len();
+            vector_store
+                .insert_documents(embeddings_page.to_vec())
+                .await?;
+            println!("{progress}");
+        }
 
         vector_store
     } else {
@@ -60,49 +69,49 @@ async fn main() -> Result<()> {
         QdrantVectorStore::new(qdrant, embedding_model, query_params.build())
     };
 
-    println!("Initialized and prepared vector store");
+    println!("Initialized and prepared vector store\n");
 
-    // let client = openrouter::from_env()
-    //     .unwrap_or_else(|e| panic!("Failed to create OpenRouter client: {e}"));
-    // let model_name = std::env::var("OPENROUTER_MODEL_NAME").expect("OPENROUTER_MODEL_NAME not set");
-    // let llm = client.completion(model_name);
+    let client = openrouter::from_env()
+        .unwrap_or_else(|e| panic!("Failed to create OpenRouter client: {e}"));
+    let model_name = std::env::var("OPENROUTER_MODEL_NAME").expect("OPENROUTER_MODEL_NAME not set");
+    let llm = client.completion(model_name);
 
-    // let rag_agent = AgentBuilder::new(llm)
-    //     .preamble("You are a helpful assistant that answers questions about techincal docs")
-    //     .dynamic_context(4, index)
-    //     .build();
-
-    // let chatbot = ChatBotBuilder::new().agent(rag_agent).build();
-    // chatbot.run().await?;
-
-    let req = VectorSearchRequest::builder()
-        .query("Who are authors of jj?")
-        .samples(7)
+    let rag_agent = AgentBuilder::new(llm)
+        .preamble("You are a helpful assistant that answers questions about techincal docs")
+        .dynamic_context(7, vector_store)
         .build();
 
-    let hits = vector_store.top_n::<DocChunk>(req).await?;
+    let chatbot = ChatBotBuilder::new().agent(rag_agent).build();
+    chatbot.run().await?;
 
-    for hit in &hits {
-        let score = hit.0;
-        let id = &hit.1;
-        let payload = hit
-            .2
-            .text
-            .lines()
-            .take(6)
-            .map(|str| str.to_owned())
-            .collect::<Vec<String>>()
-            .join("\n");
-        println!("Score: {score}");
-        println!("ID: {id}");
-        println!("\n{payload}\n...\n");
-    }
+    // let req = VectorSearchRequest::builder()
+    //     .query("Who are authors of jj?")
+    //     .samples(7)
+    //     .build();
+
+    // let hits = vector_store.top_n::<DocChunk>(req).await?;
+
+    // for hit in &hits {
+    //     let score = hit.0;
+    //     let id = &hit.1;
+    //     let payload = hit
+    //         .2
+    //         .text
+    //         .lines()
+    //         .take(6)
+    //         .map(|str| str.to_owned())
+    //         .collect::<Vec<String>>()
+    //         .join("\n");
+    //     println!("Score: {score}");
+    //     println!("ID: {id}");
+    //     println!("\n{payload}\n...\n");
+    // }
 
     Ok(())
 }
 
 fn chunk_md_doc((path, doc): (PathBuf, String)) -> Vec<DocChunk> {
-    print!("{}", path.to_string_lossy());
+    print!("Chunking '{}'", path.to_string_lossy());
     let chunks = chunkedrs::chunk(&doc)
         .markdown()
         .split()
@@ -124,7 +133,7 @@ fn chunk_md_doc((path, doc): (PathBuf, String)) -> Vec<DocChunk> {
     chunks
 }
 
-#[derive(Eq, PartialEq, Debug, Serialize, Deserialize)]
+#[derive(Eq, PartialEq, Debug, Serialize, Deserialize, Clone)]
 struct DocChunk {
     id: String,
     text: String,
