@@ -5,5 +5,5 @@ edition = "2024"
 
 [dependencies]
 anyhow = "1.0.104"
-rig = "0.43.0"
-tokio = "1.53.2"
+rig = { version = "0.43.0", features = ["fastembed"] }
+tokio = { version = "1.53.2", features = ["macros", "rt-multi-thread"] }
