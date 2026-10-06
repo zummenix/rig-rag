@@ -6,5 +6,8 @@ edition = "2024"
 [dependencies]
 anyhow = "1.0.104"
 chunkedrs = "2.1.1"
+qdrant-client = "1.19.0"
 rig = { version = "0.43.0", features = ["fastembed"] }
+rig-qdrant = "0.43.0"
+serde = "1.0.229"
 tokio = { version = "1.53.2", features = ["macros", "rt-multi-thread"] }
