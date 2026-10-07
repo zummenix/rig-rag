@@ -6,6 +6,7 @@ edition = "2024"
 [dependencies]
 anyhow = "1.0.104"
 chunkedrs = "2.1.1"
+clap = { version = "4", features = ["derive"] }
 qdrant-client = "1.19.0"
 rig = { version = "0.43.0", features = ["fastembed"] }
 rig-qdrant = "0.43.0"
