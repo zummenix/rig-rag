@@ -24,14 +24,18 @@ async fn main() -> Result<()> {
 
     let embedding_model =
         fastembed::Fastembed::load(&fastembed_model)?.embedding(&fastembed_model, None)?;
+    let dims = embedding_model.capabilities().ndims;
+    assert!(
+        dims > 0,
+        "fastembed reported no embedding dimensions for {fastembed_model:?}"
+    );
     let qdrant = Qdrant::from_url("http://localhost:6334").build()?;
 
     let vector_store = if !qdrant.collection_exists(COLLECTION_NAME).await? {
-        let dims = 384; // TODO: we need to get this value from fastembed somehow!
         qdrant
             .create_collection(
                 CreateCollectionBuilder::new(COLLECTION_NAME)
-                    .vectors_config(VectorParamsBuilder::new(dims, Distance::Cosine)),
+                    .vectors_config(VectorParamsBuilder::new(dims as u64, Distance::Cosine)),
             )
             .await?;
         let docs = FileLoader::with_glob("data/**/*.md")?
