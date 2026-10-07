@@ -24,6 +24,7 @@ pub async fn run(question: &str) -> Result<()> {
         let preview = chunk.text.lines().take(6).collect::<Vec<_>>().join("\n");
         println!("Score: {score}");
         println!("ID: {id}");
+        println!("{} (index={})", chunk.path, chunk.index);
         println!("\n{preview}\n...\n");
     }
 

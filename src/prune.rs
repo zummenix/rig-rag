@@ -21,13 +21,13 @@ pub async fn run(yes: bool) -> Result<()> {
         .collect();
 
     if stale.is_empty() {
-        println!("Nothing to prune; only {active:?} exists.");
+        println!("Nothing to prune; only {active:?} exists");
         return Ok(());
     }
 
     if !yes {
         println!("Would delete {} collection(s): {stale:?}", stale.len());
-        println!("Re-run with --yes to delete them.");
+        println!("Re-run with --yes to delete them");
         return Ok(());
     }
 
@@ -35,6 +35,6 @@ pub async fn run(yes: bool) -> Result<()> {
         store::delete_collection(&client, name).await?;
         println!("Deleted {name}");
     }
-    println!("Kept {active:?}.");
+    println!("Kept {active:?}");
     Ok(())
 }
