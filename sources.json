@@ -12,5 +12,12 @@
     "url": "https://github.com/podman-container-tools/podman",
     "ref": "main",
     "path": "docs"
+  },
+  {
+    "name": "qdrant",
+    "type": "git",
+    "url": "https://github.com/qdrant/landing_page",
+    "ref": "master",
+    "path": "qdrant-landing/content/documentation"
   }
 ]
