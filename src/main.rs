@@ -1,12 +1,7 @@
-mod chat;
-mod chunk;
-mod embedding;
-mod ingest;
-mod query;
-mod store;
-
 use anyhow::Result;
 use clap::{Parser, Subcommand};
+
+use rig_rag::{chat, ingest, model, query};
 
 #[derive(Parser)]
 #[command(
@@ -30,6 +25,8 @@ enum Command {
     },
     /// Launch the interactive RAG chatbot
     Chat,
+    /// Load the embedding model and print its identity
+    Model,
 }
 
 #[tokio::main]
@@ -38,5 +35,6 @@ async fn main() -> Result<()> {
         Command::Ingest => ingest::run().await,
         Command::Query { question } => query::run(&question).await,
         Command::Chat => chat::run().await,
+        Command::Model => model::run(),
     }
 }

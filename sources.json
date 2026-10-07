@@ -1,0 +1,9 @@
+[
+  {
+    "name": "jj",
+    "type": "git",
+    "url": "https://github.com/jj-vcs/jj",
+    "ref": "main",
+    "path": "docs"
+  }
+]
