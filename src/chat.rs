@@ -3,13 +3,15 @@ use rig::AgentBuilder;
 use rig::integrations::cli_chatbot::ChatBotBuilder;
 use rig::providers::openrouter;
 
+use crate::config::Config;
 use crate::store;
 
 const CONTEXT_SAMPLES: usize = 7;
 
-/// Launches the interactive RAG chatbot backed by the vector store.
+/// Launches the interactive RAG chatbot backed by the active collection.
 pub async fn run() -> Result<()> {
-    let vector_store = store::connect().await?;
+    let config = Config::load()?;
+    let vector_store = store::connect(&config).await?;
 
     let client = openrouter::from_env()
         .unwrap_or_else(|e| panic!("Failed to create OpenRouter client: {e}"));

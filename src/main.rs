@@ -1,7 +1,7 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 
-use rig_rag::{chat, ingest, model, query};
+use rig_rag::{chat, ingest, model, promote, prune, query};
 
 #[derive(Parser)]
 #[command(
@@ -15,8 +15,12 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    /// Embed local docs and insert them into Qdrant
-    Ingest,
+    /// Fetch sources, embed them and insert into Qdrant
+    Ingest {
+        /// Rebuild even if the target collection already exists
+        #[arg(long)]
+        force: bool,
+    },
     /// Retrieve the chunks most similar to a question
     Query {
         /// The question to search for
@@ -27,14 +31,27 @@ enum Command {
     Chat,
     /// Load the embedding model and print its identity
     Model,
+    /// Set the active collection in rig-rag.toml
+    Promote {
+        /// Collection name to promote (as printed by `ingest`)
+        collection: String,
+    },
+    /// Delete collections other than the active one
+    Prune {
+        /// Actually delete (otherwise the plan is printed only)
+        #[arg(long)]
+        yes: bool,
+    },
 }
 
 #[tokio::main]
 async fn main() -> Result<()> {
     match Cli::parse().command {
-        Command::Ingest => ingest::run().await,
+        Command::Ingest { force } => ingest::run(force).await,
         Command::Query { question } => query::run(&question).await,
         Command::Chat => chat::run().await,
         Command::Model => model::run(),
+        Command::Promote { collection } => promote::run(&collection).await,
+        Command::Prune { yes } => prune::run(yes).await,
     }
 }

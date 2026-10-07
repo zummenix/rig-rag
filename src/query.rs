@@ -2,6 +2,7 @@ use anyhow::Result;
 use rig::vector_store::{VectorSearchRequest, VectorStoreIndex};
 
 use crate::chunk::DocChunk;
+use crate::config::Config;
 use crate::store;
 
 const SAMPLES: u64 = 7;
@@ -9,7 +10,8 @@ const SAMPLES: u64 = 7;
 /// Retrieves the chunks most similar to `question` and prints them with their
 /// scores.
 pub async fn run(question: &str) -> Result<()> {
-    let vector_store = store::connect().await?;
+    let config = Config::load()?;
+    let vector_store = store::connect(&config).await?;
 
     let req = VectorSearchRequest::builder()
         .query(question)

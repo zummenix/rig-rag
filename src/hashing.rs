@@ -54,17 +54,30 @@ pub fn combine<'a>(hashes: impl IntoIterator<Item = (&'a str, &'a str)>) -> Stri
     hex::encode(hasher.finalize())
 }
 
+/// Prefix shared by every collection this tool creates.
+pub const COLLECTION_PREFIX: &str = "docs";
+
 /// Collection name derived from the model slug and combined hash, sanitized for
 /// Qdrant (which only accepts ASCII alphanumerics, `-` and `_`).
 pub fn collection_name(model_slug: &str, combined: &str) -> String {
     format!(
-        "docs-{}-{}",
+        "{COLLECTION_PREFIX}-{}-{}",
         sanitize(model_slug),
         &combined[..12.min(combined.len())]
     )
 }
 
-fn sanitize(value: &str) -> String {
+/// Recovers the (sanitized) model slug from a collection name, e.g.
+/// `docs-bge-small-en-v1-5-0123456789ab` -> `bge-small-en-v1-5`.
+pub fn model_of(collection: &str) -> Option<&str> {
+    let rest = collection
+        .strip_prefix(COLLECTION_PREFIX)?
+        .strip_prefix('-')?;
+    rest.rsplit_once('-').map(|(model, _hash)| model)
+}
+
+/// Replaces anything Qdrant rejects in a name with `-`.
+pub fn sanitize(value: &str) -> String {
     value
         .chars()
         .map(|c| {
@@ -164,5 +177,12 @@ mod tests {
             collection_name("bge-small-en-v1.5", "0123456789abcdef"),
             "docs-bge-small-en-v1-5-0123456789ab"
         );
+    }
+
+    #[test]
+    fn model_of_round_trips_collection_name() {
+        let name = collection_name("bge-small-en-v1.5", "0123456789abcdef");
+        assert_eq!(model_of(&name), Some("bge-small-en-v1-5"));
+        assert_eq!(model_of("unrelated"), None);
     }
 }

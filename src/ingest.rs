@@ -1,58 +1,116 @@
+use std::path::PathBuf;
+
 use anyhow::Result;
-use qdrant_client::{
-    Qdrant,
-    qdrant::{CreateCollectionBuilder, Distance, VectorParamsBuilder},
-};
 use rig::embeddings::EmbeddingsBuilder;
 use rig::loaders::FileLoader;
 use rig::vector_store::InsertDocuments;
 
 use crate::chunk::chunk_md_doc;
-use crate::{embedding, store};
+use crate::config::Config;
+use crate::sources::Sources;
+use crate::{embedding, fetch, hashing, stats, store};
 
-/// Embeds every markdown document under `data/` and upserts the chunks into
-/// Qdrant, creating the collection when it is missing.
-pub async fn run() -> Result<()> {
-    let model = embedding::load()?;
-    let dims = model.capabilities().ndims;
+const INSERT_PAGE: usize = 100;
 
-    let client = Qdrant::from_url(store::QDRANT_URL).build()?;
-    if !client.collection_exists(store::COLLECTION_NAME).await? {
-        client
-            .create_collection(
-                CreateCollectionBuilder::new(store::COLLECTION_NAME)
-                    .vectors_config(VectorParamsBuilder::new(dims as u64, Distance::Cosine)),
-            )
-            .await?;
+/// Fetches every configured source, hashes it, and embeds the whole corpus into
+/// a collection named after the model and combined hash. Existing collections
+/// are reused untouched unless `force` is set.
+pub async fn run(force: bool) -> Result<()> {
+    let config = Config::load()?;
+    let sources = Sources::load()?;
+
+    println!("Fetching {} source(s)", sources.iter().count());
+    fetch::fetch_all(&sources)?;
+
+    let hashes = hashing::hash_sources(&sources)?;
+    for (name, hash) in &hashes {
+        println!("  {name}: {}", &hash[..12]);
+    }
+    let combined = hashing::combine(
+        hashes
+            .iter()
+            .map(|(name, hash)| (name.as_str(), hash.as_str())),
+    );
+    let target = hashing::collection_name(&config.embedding.model, &combined);
+    println!("Target collection: {target}");
+
+    let client = store::client(&config.qdrant.url)?;
+    let exists = client.collection_exists(&target).await?;
+    if exists && !force {
+        println!("Collection {target} already exists; nothing to do. Use --force to rebuild.");
+        stats::report_memory();
+        return Ok(());
+    }
+    if exists {
+        println!("--force: deleting existing collection {target}");
+        store::delete_collection(&client, &target).await?;
     }
 
-    let docs = FileLoader::with_glob("data/**/*.md")?
-        .read_with_path()
-        .ignore_errors()
-        .into_iter()
-        .collect::<Vec<_>>();
+    let model = embedding::load_slug(&config.embedding.model)?;
+    let dims = model.capabilities().ndims as u64;
+    store::create_collection(&client, &target, dims).await?;
 
-    println!("Loaded documents count: {}", docs.len());
+    let documents = load_documents(&sources)?;
+    println!("Loaded documents count: {}", documents.len());
 
     let embeddings = EmbeddingsBuilder::new(model.clone())
-        .documents(docs.into_iter().flat_map(chunk_md_doc))?
+        .documents(documents.into_iter().flat_map(chunk_md_doc))?
         .build()
         .await?;
-
     println!("Prepared embeddings count: {}", embeddings.len());
 
-    let vector_store = store::new_store(client, model);
-
-    println!("Inserting into the vector store");
-
+    let vector_store = store::new_store(client, model, &target);
     let mut progress = 0;
-    for embeddings_page in embeddings.chunks(100) {
-        progress += embeddings_page.len();
-        vector_store
-            .insert_documents(embeddings_page.to_vec())
-            .await?;
+    for page in embeddings.chunks(INSERT_PAGE) {
+        progress += page.len();
+        vector_store.insert_documents(page.to_vec()).await?;
         println!("{progress}");
     }
 
+    println!("Ingested into {target}.");
+    println!("Promote with: rig-rag promote {target}");
+    stats::report_memory();
     Ok(())
+}
+
+/// Loads markdown documents from each configured source directory. The corpus is
+/// exactly the configured sources, so a source removed from sources.json is
+/// never read even if its stale directory still exists on disk.
+fn load_documents(sources: &Sources) -> Result<Vec<(PathBuf, String)>> {
+    let mut documents = Vec::new();
+    for source in sources.iter() {
+        let pattern = format!("{}/**/*.md", source.dir().display());
+        documents.extend(
+            FileLoader::with_glob(&pattern)?
+                .read_with_path()
+                .ignore_errors(),
+        );
+    }
+    Ok(documents)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn load_documents_ignores_unlisted_directories() {
+        let root = std::env::temp_dir().join(format!("rig-rag-ingest-{}", std::process::id()));
+        let cwd = std::env::current_dir().unwrap();
+        std::fs::create_dir_all(root.join("data/jj/docs")).unwrap();
+        std::fs::create_dir_all(root.join("data/stale")).unwrap();
+        std::fs::write(root.join("data/jj/docs/a.md"), "# a").unwrap();
+        std::fs::write(root.join("data/stale/b.md"), "# b").unwrap();
+
+        let sources =
+            Sources::parse(r#"[{"name":"jj","type":"git","url":"u","path":"docs"}]"#).unwrap();
+
+        std::env::set_current_dir(&root).unwrap();
+        let documents = load_documents(&sources).unwrap();
+        std::env::set_current_dir(&cwd).unwrap();
+
+        assert_eq!(documents.len(), 1);
+        assert!(documents[0].0.ends_with("a.md"));
+        let _ = std::fs::remove_dir_all(&root);
+    }
 }

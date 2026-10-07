@@ -1,5 +1,6 @@
-/target
+target/
 data/
 .fastembed_cache/
 qdrant_storage/
-.env
+.git/
+.jj/

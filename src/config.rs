@@ -34,7 +34,7 @@ pub struct EmbeddingConfig {
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct CollectionConfig {
-    /// Alias (or collection) the commands read from and write to.
+    /// Name of the active collection. Empty until the first `promote`.
     pub active: String,
 }
 
@@ -63,6 +63,20 @@ impl Config {
     }
 }
 
+/// Rewrites `[collection].active` in `path`, preserving comments and layout.
+pub fn write_active(path: impl AsRef<Path>, collection: &str) -> Result<()> {
+    let path = path.as_ref();
+    let raw = std::fs::read_to_string(path)
+        .with_context(|| format!("failed to read config at {}", path.display()))?;
+    let mut document = raw
+        .parse::<toml_edit::DocumentMut>()
+        .context("failed to parse config")?;
+    document["collection"]["active"] = toml_edit::value(collection);
+    std::fs::write(path, document.to_string())
+        .with_context(|| format!("failed to write config at {}", path.display()))?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -75,7 +89,7 @@ url = "http://localhost:6334"
 model = "bge-small-en-v1.5"
 
 [collection]
-active = "docs"
+active = ""
 "#;
 
     #[test]
@@ -83,7 +97,7 @@ active = "docs"
         let config = Config::parse(SAMPLE).unwrap();
         assert_eq!(config.qdrant.url, "http://localhost:6334");
         assert_eq!(config.embedding.model, "bge-small-en-v1.5");
-        assert_eq!(config.collection.active, "docs");
+        assert_eq!(config.collection.active, "");
     }
 
     #[test]
@@ -102,5 +116,24 @@ active = "docs"
             .unwrap()
             .with_qdrant_override(Some("http://qdrant:6334".into()));
         assert_eq!(config.qdrant.url, "http://qdrant:6334");
+    }
+
+    #[test]
+    fn write_active_preserves_comments_and_updates_value() {
+        let dir = std::env::temp_dir().join(format!("rig-rag-config-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("rig-rag.toml");
+        std::fs::write(
+            &path,
+            "# keep me\n[qdrant]\nurl = \"u\"\n\n[embedding]\nmodel = \"m\"\n\n[collection]\nactive = \"\"\n",
+        )
+        .unwrap();
+
+        write_active(&path, "docs-x").unwrap();
+
+        let written = std::fs::read_to_string(&path).unwrap();
+        assert!(written.contains("# keep me"));
+        assert_eq!(Config::parse(&written).unwrap().collection.active, "docs-x");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

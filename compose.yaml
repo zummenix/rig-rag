@@ -1,0 +1,30 @@
+services:
+  qdrant:
+    image: qdrant/qdrant:latest
+    restart: unless-stopped
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      # Bind mount so Qdrant's data is visible on the host.
+      - ./qdrant_storage:/qdrant/storage
+
+  app:
+    image: rig-rag:latest
+    build:
+      context: .
+      dockerfile: Containerfile
+    depends_on:
+      - qdrant
+    working_dir: /app
+    environment:
+      # Overrides [qdrant].url from the mounted config.
+      QDRANT_URL: http://qdrant:6334
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENROUTER_MODEL_NAME: ${OPENROUTER_MODEL_NAME:-}
+    # No memory limit: ingest peaks around 20-25 GiB.
+    volumes:
+      - ./sources.json:/app/sources.json:ro
+      # Read-write: `promote` rewrites [collection].active here.
+      - ./rig-rag.toml:/app/rig-rag.toml
+      - ./data:/app/data
