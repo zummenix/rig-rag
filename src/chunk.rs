@@ -18,9 +18,9 @@ impl rig::Embed for DocChunk {
     }
 }
 
-pub fn chunk_md_doc((path, doc): (PathBuf, String)) -> Vec<DocChunk> {
+pub fn chunk_md_doc((path, doc): &(PathBuf, String)) -> Vec<DocChunk> {
     print!("Chunking '{}'", path.to_string_lossy());
-    let chunks = chunkedrs::chunk(&doc)
+    let chunks = chunkedrs::chunk(doc)
         .markdown()
         .split()
         .into_iter()

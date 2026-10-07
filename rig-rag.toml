@@ -6,4 +6,4 @@ model = "bge-small-en-v1.5"
 
 [collection]
 # Real collection name; set by `rig-rag promote <collection>`.
-active = "docs-bge-small-en-v1-5-d77b3b6c12a6"
+active = "docs-bge-small-en-v1-5-fee4d436291e"

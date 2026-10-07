@@ -10,7 +10,7 @@ use crate::config::Config;
 use crate::sources::Sources;
 use crate::{embedding, fetch, hashing, stats, store};
 
-const INSERT_PAGE: usize = 100;
+const DOCUMENTS_BATCH_SIZE: usize = 10;
 
 /// Fetches every configured source, hashes it, and embeds the whole corpus into
 /// a collection named after the model and combined hash. Existing collections
@@ -53,20 +53,18 @@ pub async fn run(force: bool) -> Result<()> {
     let documents = load_documents(&sources)?;
     println!("Loaded documents count: {}", documents.len());
 
-    let embeddings = EmbeddingsBuilder::new(model.clone())
-        .documents(documents.into_iter().flat_map(chunk_md_doc))?
-        .build()
-        .await?;
-    println!("Prepared embeddings count: {}", embeddings.len());
-
-    let vector_store = store::new_store(client, model, &target);
-    let mut progress = 0;
-    for page in embeddings.chunks(INSERT_PAGE) {
-        progress += page.len();
-        vector_store.insert_documents(page.to_vec()).await?;
-        println!("{progress}");
+    let mut total_embeddings_count = 0;
+    let vector_store = store::new_store(client, model.clone(), &target);
+    for documents_batch in documents.chunks(DOCUMENTS_BATCH_SIZE) {
+        let embeddings = EmbeddingsBuilder::new(model.clone())
+            .documents(documents_batch.iter().flat_map(chunk_md_doc))?
+            .build()
+            .await?;
+        total_embeddings_count += embeddings.len();
+        vector_store.insert_documents(embeddings).await?;
     }
 
+    println!("Prepared embeddings count: {}", total_embeddings_count);
     println!("Ingested into {target}.");
     println!("Promote with: rig-rag promote {target}");
     stats::report_memory();

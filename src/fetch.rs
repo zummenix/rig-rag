@@ -9,6 +9,7 @@ use crate::sources::{Source, SourceKind, Sources};
 /// Fetches every source into its `data/<name>` directory.
 pub fn fetch_all(sources: &Sources) -> Result<()> {
     for source in sources.iter() {
+        println!("\nFetching source '{}'\n", source.name);
         fetch(source).with_context(|| format!("failed to fetch source {:?}", source.name))?;
     }
     Ok(())
