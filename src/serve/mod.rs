@@ -11,6 +11,7 @@ pub mod prod;
 pub mod query;
 pub mod state;
 
+use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
@@ -70,12 +71,23 @@ pub async fn run(args: ServeArgs) -> Result<()> {
 
     let listener = tokio::net::TcpListener::bind(&bind).await?;
     println!(
-        "rig-rag serving on http://{} (site: {})",
-        listener.local_addr()?,
+        "rig-rag serving on {} (site: {})",
+        display_url(listener.local_addr()?),
         site_dir.display()
     );
     axum::serve(listener, app).await?;
     Ok(())
+}
+
+/// A browsable URL for a bound address. Wildcard binds (`0.0.0.0`, `::`) are
+/// shown as `localhost`; a wildcard is a listen-all address, not one a browser
+/// can open directly.
+fn display_url(addr: SocketAddr) -> String {
+    if addr.ip().is_unspecified() {
+        format!("http://localhost:{}", addr.port())
+    } else {
+        format!("http://{addr}")
+    }
 }
 
 /// Builds the API router, adding static-file serving when `site_dir` exists.
@@ -98,4 +110,24 @@ pub fn router(state: AppState) -> Router {
 pub(crate) fn internal_error(error: anyhow::Error) -> Response {
     eprintln!("serve: request failed: {error:#}");
     (StatusCode::INTERNAL_SERVER_ERROR, "internal error").into_response()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::display_url;
+    use std::net::SocketAddr;
+
+    #[test]
+    fn wildcard_bind_displays_localhost() {
+        let addr: SocketAddr = "0.0.0.0:8080".parse().unwrap();
+        assert_eq!(display_url(addr), "http://localhost:8080");
+        let addr: SocketAddr = "[::]:8080".parse().unwrap();
+        assert_eq!(display_url(addr), "http://localhost:8080");
+    }
+
+    #[test]
+    fn concrete_bind_displays_itself() {
+        let addr: SocketAddr = "127.0.0.1:8080".parse().unwrap();
+        assert_eq!(display_url(addr), "http://127.0.0.1:8080");
+    }
 }

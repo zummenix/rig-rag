@@ -1,8 +1,7 @@
 # rig-rag Web UI — Implementation Plan
 
-Status: **Phases 0–4 done; Phase 5 not yet implemented.** Written 2026-10-08.
-Next session: start at "Phase 5". This document is the source of truth for
-decisions; update it when a phase changes a decision.
+Status: **Phases 0–5 done.** Written 2026-10-08. This document is the source of
+truth for decisions; update it when a phase changes a decision.
 
 Phase 0 landed: `shared` crate (wire types + `k` bounds), `Retriever` /
 `Completer` traits in `src/serve/state.rs`, `src/retrieval.rs` extracted from
@@ -63,6 +62,18 @@ plain `npx playwright test` from `site/tests` (after `npm install` +
 `npx playwright install chromium`) is green — all 6 specs pass. Wired into the
 Justfile as `just test-site` (kept out of `just check`, which stays Rust-only and
 hermetic), with `just check-all` chaining `check` + `test-site`.
+
+Phase 5 landed: the `Containerfile` gained a `site-builder` stage
+(`wasm32-unknown-unknown` + `cargo install trunk`) that builds `site/dist` and
+copies it into the runtime image at `/app/site/dist`; the native `builder` stage
+now copies the `shared`/`site` member manifests and stubs their sources so
+workspace resolution works, and builds with `-p rig-rag`. `compose.yaml` gained
+a `server` service (same image, `command: ["serve", ...]`, `ports: 8080:8080`,
+same env/volumes as `app`). README documents `serve`, the UI build
+prerequisites, the `[server]` section, and the `podman compose up -d qdrant
+server` flow. No decisions changed. Follow-up: `serve` now logs a browsable URL
+(`display_url` maps a wildcard bind like `0.0.0.0` to `localhost`) instead of
+printing the raw listen address.
 
 ## Goal
 

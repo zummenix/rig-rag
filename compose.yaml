@@ -28,3 +28,26 @@ services:
       # Read-write: `promote` rewrites [collection].active here.
       - ./rig-rag.toml:/app/rig-rag.toml
       - ./data:/app/data
+
+  # Same image as `app`; serves the API and the built WASM UI. Requires an
+  # active collection and OpenRouter creds (it refuses to boot without them).
+  server:
+    image: rig-rag:latest
+    build:
+      context: .
+      dockerfile: Containerfile
+    command: ["serve", "--bind", "0.0.0.0:8080", "--site-dir", "/app/site/dist"]
+    restart: unless-stopped
+    depends_on:
+      - qdrant
+    working_dir: /app
+    ports:
+      - "8080:8080"
+    environment:
+      QDRANT_URL: http://qdrant:6334
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENROUTER_MODEL_NAME: ${OPENROUTER_MODEL_NAME:-}
+    volumes:
+      - ./sources.json:/app/sources.json:ro
+      - ./rig-rag.toml:/app/rig-rag.toml
+      - ./data:/app/data
