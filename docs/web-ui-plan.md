@@ -1,7 +1,7 @@
 # rig-rag Web UI — Implementation Plan
 
-Status: **Phases 0–2 done; Phases 3–5 not yet implemented.** Written 2026-10-08.
-Next session: start at "Phase 3". This document is the source of truth for
+Status: **Phases 0–3 done; Phases 4–5 not yet implemented.** Written 2026-10-08.
+Next session: start at "Phase 4". This document is the source of truth for
 decisions; update it when a phase changes a decision.
 
 Phase 0 landed: `shared` crate (wire types + `k` bounds), `Retriever` /
@@ -26,6 +26,24 @@ feature-gated `src/bin/mock_server.rs` serves the real router with the mocks
 + `eventsource-stream` (both new dev-deps). `mock_server` and `api_e2e` carry
 `required-features = ["mock"]`, so a plain `cargo test` skips them; `just check`
 runs with `--all-features`. No decisions changed.
+
+Phase 3 landed: `site/` is a Leptos 0.8 (CSR) + trunk crate depending only on
+`shared` (plus `leptos`, `reqwest`, `eventsource-stream`, `futures`, `web-sys`,
+`serde_json`), joined into the workspace (`members = ["shared", "site"]`). Tabs
+`Chat | Query` (both kept mounted so state survives switching); a shared
+multiline `Composer` (Enter submits, Shift+Enter newlines; the value is read
+straight off the DOM node so the caret never resets); the query page validates
+`k` against `shared::{MIN_K,MAX_K}`; the chat page holds each turn in its own
+`RwSignal` (fine-grained deltas, `<For>` keyed by turn id preserves doc-card and
+`thinking` state) and replays completed turns as history. `Trunk.toml` serves on
+`127.0.0.1:3000` and proxies `/api/*` to the axum server. `trunk build --release`
+produces `site/dist/index.html` + wasm, and `cargo clippy --workspace
+--all-targets --all-features` (which now compiles `site` for the host) is green.
+One decision changed: the client pins **`reqwest 0.13`** to match the version
+Leptos's `server_fn` already pulls — `reqwest 0.12` + `0.13` together pull two
+`wasm-streams` versions that both export the `IntoUnderlyingByteSource` JS name,
+which makes wasm-bindgen abort the build. (The host-side `reqwest` dev-dependency
+for the API e2e stays 0.12.)
 
 ## Goal
 

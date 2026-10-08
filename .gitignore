@@ -3,3 +3,5 @@ data/
 .fastembed_cache/
 qdrant_storage/
 .env
+site/dist/
+site/target/

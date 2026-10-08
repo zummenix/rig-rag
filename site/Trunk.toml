@@ -1,0 +1,13 @@
+[build]
+target = "index.html"
+dist = "dist"
+
+[serve]
+addresses = ["127.0.0.1"]
+port = 3000
+open = false
+
+# `trunk serve` forwards the API to the axum server, so the WASM client can use
+# same-origin relative URLs (`/api/...`) in both dev and production.
+[[proxy]]
+backend = "http://127.0.0.1:8080/api"

@@ -1,0 +1,285 @@
+:root {
+  --bg: #0f1115;
+  --panel: #171a21;
+  --panel-2: #1f232c;
+  --border: #2a2f3a;
+  --text: #e6e9ef;
+  --muted: #8b93a7;
+  --accent: #6ea8fe;
+  --accent-weak: #24304a;
+  --error: #f7768e;
+  --user: #24304a;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 15px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    sans-serif;
+}
+
+.app {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 0 16px 48px;
+}
+
+.app-header {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 20px 0 16px;
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  background: var(--bg);
+  z-index: 10;
+}
+
+.app-header h1 {
+  font-size: 20px;
+  margin: 0;
+  letter-spacing: 0.02em;
+}
+
+.tabs {
+  display: flex;
+  gap: 8px;
+}
+
+.tab {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 6px 16px;
+  cursor: pointer;
+  font: inherit;
+}
+
+.tab:hover {
+  color: var(--text);
+}
+
+.tab.active {
+  color: var(--text);
+  border-color: var(--accent);
+  background: var(--accent-weak);
+}
+
+.content {
+  padding-top: 24px;
+}
+
+.composer {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 16px 0;
+}
+
+.composer-input {
+  width: 100%;
+  resize: vertical;
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 14px;
+  font: inherit;
+}
+
+.composer-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.composer-hint {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.composer-send {
+  align-self: flex-end;
+  background: var(--accent);
+  color: #0b1220;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 22px;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.composer-send:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.query-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--muted);
+}
+
+.query-controls label {
+  color: var(--text);
+}
+
+.query-controls input {
+  width: 72px;
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 10px;
+  font: inherit;
+}
+
+.field-hint {
+  font-size: 12px;
+}
+
+.doc-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 14px 0;
+}
+
+.doc-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 14px;
+  cursor: pointer;
+}
+
+.doc-card:hover {
+  border-color: #3a4152;
+}
+
+.doc-card-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+
+.doc-path {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.doc-score {
+  white-space: nowrap;
+}
+
+.doc-text {
+  margin: 0;
+  white-space: pre-wrap;
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.doc-card.expanded .doc-text {
+  -webkit-line-clamp: unset;
+  display: block;
+}
+
+.empty-card {
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  padding: 20px;
+  text-align: center;
+  color: var(--muted);
+  margin: 14px 0;
+}
+
+.turns {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.turn {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.bubble {
+  border-radius: 12px;
+  padding: 10px 14px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.bubble.user {
+  background: var(--user);
+  align-self: flex-end;
+  max-width: 85%;
+}
+
+.bubble.assistant {
+  background: var(--panel);
+  border: 1px solid var(--border);
+}
+
+.bubble.error {
+  background: #2a1b21;
+  border: 1px solid var(--error);
+  color: var(--error);
+}
+
+.bubble.muted,
+.muted {
+  color: var(--muted);
+}
+
+.error.inline {
+  color: var(--error);
+  margin: 8px 0 0;
+  font-size: 13px;
+}
+
+.thinking {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 8px 12px;
+  color: var(--muted);
+}
+
+.thinking summary {
+  cursor: pointer;
+  font-size: 13px;
+  user-select: none;
+}
+
+.thinking pre {
+  margin: 8px 0 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 13px;
+}
+
+.cursor {
+  color: var(--accent);
+}
+
+.cursor.hidden {
+  display: none;
+}

@@ -1,6 +1,5 @@
 [workspace]
-# `site` joins the workspace in Phase 3, once the Leptos crate exists.
-members = ["shared"]
+members = ["shared", "site"]
 
 [package]
 name = "rig-rag"
