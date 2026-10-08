@@ -1,7 +1,7 @@
 # rig-rag Web UI — Implementation Plan
 
-Status: **Phases 0–1 done; Phases 2–5 not yet implemented.** Written 2026-10-08.
-Next session: start at "Phase 2". This document is the source of truth for
+Status: **Phases 0–2 done; Phases 3–5 not yet implemented.** Written 2026-10-08.
+Next session: start at "Phase 3". This document is the source of truth for
 decisions; update it when a phase changes a decision.
 
 Phase 0 landed: `shared` crate (wire types + `k` bounds), `Retriever` /
@@ -15,6 +15,17 @@ Phase 1 landed: `rig-rag serve` (axum + `ServeDir`) with `/api/health`,
 `keep_alive_secs`) with flags overriding; production impls in `src/serve/prod.rs`.
 Pre-stream failures (retrieval or completer setup) return a plain `500`; only
 failures after the stream starts are `Error` events.
+
+Phase 2 landed: `mock` cargo feature gating `src/serve/mock.rs`
+(`MockRetriever` returns three canned hits, honoring threshold + `k`;
+`MockCompleter::new()` emits thinking → deltas → `Final`, and
+`MockCompleter::failing_after(n)` emits `n` deltas then an error). The
+feature-gated `src/bin/mock_server.rs` serves the real router with the mocks
+(`--bind`, `--site-dir`, `--keep-alive-secs`, `--fail-after`), and
+`tests/api_e2e.rs` binds the real router on port 0 and drives it with `reqwest`
++ `eventsource-stream` (both new dev-deps). `mock_server` and `api_e2e` carry
+`required-features = ["mock"]`, so a plain `cargo test` skips them; `just check`
+runs with `--all-features`. No decisions changed.
 
 ## Goal
 

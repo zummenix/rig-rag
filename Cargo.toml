@@ -7,6 +7,31 @@ name = "rig-rag"
 version = "0.1.0"
 edition = "2024"
 
+[features]
+# Canned `Retriever`/`Completer` for the API e2e test and the Playwright
+# `mock_server` binary; never enabled for production builds.
+mock = []
+
+[lib]
+name = "rig_rag"
+path = "src/lib.rs"
+
+[[bin]]
+name = "rig-rag"
+path = "src/main.rs"
+
+# Real router + mocks, used by Playwright (`site/tests`). Build with `--features mock`.
+[[bin]]
+name = "mock_server"
+path = "src/bin/mock_server.rs"
+required-features = ["mock"]
+
+# Drives the real router with mocks; skipped unless `--features mock`.
+[[test]]
+name = "api_e2e"
+path = "tests/api_e2e.rs"
+required-features = ["mock"]
+
 [dependencies]
 anyhow = "1.0.104"
 axum = "0.8"
@@ -21,7 +46,11 @@ serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0"
 sha2 = "0.11"
 shared = { path = "shared" }
-tokio = { version = "1.53.2", features = ["macros", "net", "rt-multi-thread"] }
+tokio = { version = "1.53.2", features = ["macros", "net", "rt-multi-thread", "time"] }
 toml = "1.1"
 toml_edit = "0.25"
 tower-http = { version = "0.6", features = ["fs"] }
+
+[dev-dependencies]
+eventsource-stream = "0.2"
+reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "rustls-tls"] }

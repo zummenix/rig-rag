@@ -5,6 +5,8 @@
 
 pub mod chat;
 pub mod health;
+#[cfg(feature = "mock")]
+pub mod mock;
 pub mod prod;
 pub mod query;
 pub mod state;
