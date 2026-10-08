@@ -1,0 +1,14 @@
+{
+  "name": "rig-rag-site-tests",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Playwright e2e tests for the rig-rag Leptos UI, driven against the feature-gated mock_server.",
+  "scripts": {
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "report": "playwright show-report"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.64.0"
+  }
+}

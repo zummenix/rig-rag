@@ -81,6 +81,24 @@ cargo run -- query -q "how do I squash commits?"
 cargo run -- chat
 ```
 
+## Web UI tests
+
+The Leptos UI in `site/` has a Playwright end-to-end suite (`site/tests`) that
+drives the real router and the built WASM bundle against the mock backends
+(`--features mock`) — no Qdrant or OpenRouter needed. One-time setup, then run:
+
+```sh
+cd site/tests
+npm install
+npx playwright install chromium   # downloads the browser
+npx playwright test
+```
+
+`global-setup.ts` runs `cargo build --features mock --bin mock_server` and
+`trunk build` (for `site/dist`) before launching the servers, so make sure
+`trunk` and the `wasm32-unknown-unknown` target are installed. Set
+`RIG_RAG_SKIP_BUILD=1` to reuse existing builds.
+
 ## Container workflow (podman)
 
 ```sh

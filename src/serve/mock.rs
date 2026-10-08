@@ -94,6 +94,7 @@ enum MockMode {
 /// Emits [`MOCK_THINKING`], [`MOCK_DELTAS`], then `Final` (or an error).
 pub struct MockCompleter {
     mode: MockMode,
+    delay: Duration,
 }
 
 impl MockCompleter {
@@ -101,6 +102,7 @@ impl MockCompleter {
     pub fn new() -> Self {
         Self {
             mode: MockMode::Happy,
+            delay: MOCK_EVENT_DELAY,
         }
     }
 
@@ -108,7 +110,15 @@ impl MockCompleter {
     pub fn failing_after(deltas: usize) -> Self {
         Self {
             mode: MockMode::FailAfter(deltas),
+            delay: MOCK_EVENT_DELAY,
         }
+    }
+
+    /// Overrides the per-event delay. The UI e2e raises it so a browser can
+    /// observe the answer arriving in pieces rather than all at once.
+    pub fn with_delay(mut self, delay: Duration) -> Self {
+        self.delay = delay;
+        self
     }
 }
 
@@ -125,6 +135,7 @@ impl Completer for MockCompleter {
         _history: Vec<Msg>,
     ) -> BoxFuture<'a, Result<ChatStream>> {
         let mode = self.mode;
+        let delay = self.delay;
         Box::pin(async move {
             let mut events: Vec<Result<ChatEvent>> = Vec::new();
             for text in MOCK_THINKING {
@@ -155,8 +166,8 @@ impl Completer for MockCompleter {
 
             // `then` drives the futures sequentially, so each event waits for
             // the previous delay before yielding.
-            let stream = futures::stream::iter(events).then(|event| async move {
-                tokio::time::sleep(MOCK_EVENT_DELAY).await;
+            let stream = futures::stream::iter(events).then(move |event| async move {
+                tokio::time::sleep(delay).await;
                 event
             });
             Ok(Box::pin(stream) as ChatStream)

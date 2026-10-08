@@ -23,6 +23,10 @@ struct Args {
     /// SSE keep-alive interval in seconds.
     #[arg(long, default_value_t = 15)]
     keep_alive_secs: u64,
+    /// Delay between mock events, in milliseconds. The UI e2e raises this so
+    /// Playwright can observe the answer streaming in pieces.
+    #[arg(long, default_value_t = 5)]
+    event_delay_ms: u64,
     /// Fail the completer after this many answer deltas (default: never).
     #[arg(long)]
     fail_after: Option<usize>,
@@ -35,7 +39,8 @@ async fn main() -> Result<()> {
     let completer = match args.fail_after {
         Some(n) => mock::MockCompleter::failing_after(n),
         None => mock::MockCompleter::new(),
-    };
+    }
+    .with_delay(Duration::from_millis(args.event_delay_ms));
     let state = AppState {
         retriever: Arc::new(mock::MockRetriever::new()),
         completer: Arc::new(completer),

@@ -1,7 +1,7 @@
 # rig-rag Web UI — Implementation Plan
 
-Status: **Phases 0–3 done; Phases 4–5 not yet implemented.** Written 2026-10-08.
-Next session: start at "Phase 4". This document is the source of truth for
+Status: **Phases 0–4 done; Phase 5 not yet implemented.** Written 2026-10-08.
+Next session: start at "Phase 5". This document is the source of truth for
 decisions; update it when a phase changes a decision.
 
 Phase 0 landed: `shared` crate (wire types + `k` bounds), `Retriever` /
@@ -44,6 +44,25 @@ Leptos's `server_fn` already pulls — `reqwest 0.12` + `0.13` together pull two
 `wasm-streams` versions that both export the `IntoUnderlyingByteSource` JS name,
 which makes wasm-bindgen abort the build. (The host-side `reqwest` dev-dependency
 for the API e2e stays 0.12.)
+
+Phase 4 landed: `site/tests/` is a **`@playwright/test` 1.64** suite (npm
+`package.json`; not the agent-oriented `@playwright/cli`). `global-setup.ts`
+builds `target/debug/mock_server` (`--features mock`) and `trunk build`s
+`site/dist`, launches two servers on fixed ports — happy on `3555`, and
+`--fail-after 1` on `3556` for the error spec — then tears them down
+(`RIG_RAG_SKIP_BUILD=1` skips the builds and reuses artifacts). Ports, canned
+mock values, and panel-scoped selectors live in `support.ts`; both UI pages stay
+mounted, so selectors are scoped to `section.panel.chat` / `section.panel:not(.chat)`.
+Specs map one-to-one to the Phase 4 acceptance bullets: `tabs`, `composer`
+(Enter / Shift+Enter), `chat-stream` (incremental then settled), `doc-cards`
+(collapse ↔ expand), `query-k` (`1..=20`), `error` (error bubble). One decision
+changed: `mock_server` gained **`--event-delay-ms`** (default `5`) and
+`MockCompleter::with_delay`, so the streaming spec can slow the turn enough to
+observe incremental rendering; the default keeps Phase 2 behavior identical. A
+plain `npx playwright test` from `site/tests` (after `npm install` +
+`npx playwright install chromium`) is green — all 6 specs pass. Wired into the
+Justfile as `just test-site` (kept out of `just check`, which stays Rust-only and
+hermetic), with `just check-all` chaining `check` + `test-site`.
 
 ## Goal
 
