@@ -1,4 +1,18 @@
-use shared::{DocHit, Msg};
+use std::convert::Infallible;
+
+use axum::{
+    Json,
+    extract::State,
+    response::{
+        IntoResponse, Response,
+        sse::{Event, KeepAlive, Sse},
+    },
+};
+use futures::StreamExt;
+use shared::{ChatEvent, ChatRequest, DocHit, Msg};
+
+use crate::retrieval::THRESHOLD;
+use crate::serve::{internal_error, state::AppState};
 
 /// Number of most recent transcript messages forwarded to the model. The client
 /// still owns the full transcript; this only bounds the LLM request.
@@ -38,6 +52,58 @@ pub fn build_prompt(question: &str, docs: &[DocHit]) -> String {
     } else {
         format!("{}\n\nQuestion: {question}", context_block(docs))
     }
+}
+
+/// `POST /api/chat` — retrieve on the latest user message, then stream
+/// `Docs` → (`Thinking`/`Delta`)* → `Final` | `Error` as SSE.
+///
+/// Pre-stream failures (retrieval or completer setup) return a plain `500`;
+/// once the stream starts, failures are `Error` events followed by end-of-body.
+pub async fn handler(State(state): State<AppState>, Json(request): Json<ChatRequest>) -> Response {
+    let docs = match state
+        .retriever
+        .retrieve(&request.prompt, shared::DEFAULT_K, THRESHOLD)
+        .await
+    {
+        Ok(docs) => docs,
+        Err(error) => return internal_error(error),
+    };
+
+    let prompt = build_prompt(&request.prompt, &docs);
+    let history = cap_history(request.history);
+
+    let answer = match state.completer.complete(prompt, history).await {
+        Ok(stream) => stream,
+        Err(error) => return internal_error(error),
+    };
+
+    let docs_event = ChatEvent::Docs { docs };
+    let events = futures::stream::once(async move { Ok::<_, Infallible>(to_event(docs_event)) })
+        .chain(answer.map(|item| {
+            Ok::<_, Infallible>(to_event(match item {
+                Ok(event) => event,
+                Err(error) => ChatEvent::Error {
+                    message: error.to_string(),
+                },
+            }))
+        }));
+
+    Sse::new(events)
+        .keep_alive(KeepAlive::new().interval(state.keep_alive))
+        .into_response()
+}
+
+/// Encodes one [`ChatEvent`] as an SSE frame; the `event:` name is the variant.
+fn to_event(event: ChatEvent) -> Event {
+    let name = event.name();
+    Event::default()
+        .event(name)
+        .json_data(event)
+        .unwrap_or_else(|_| {
+            Event::default()
+                .event("error")
+                .data("event encoding failed")
+        })
 }
 
 #[cfg(test)]

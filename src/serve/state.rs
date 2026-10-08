@@ -1,4 +1,7 @@
+use std::path::PathBuf;
 use std::pin::Pin;
+use std::sync::Arc;
+use std::time::Duration;
 
 use anyhow::Result;
 use futures::{Stream, future::BoxFuture};
@@ -7,6 +10,18 @@ use shared::{ChatEvent, DocHit, Msg};
 
 /// Boxed stream of chat events for a single stateless turn.
 pub type ChatStream = Pin<Box<dyn Stream<Item = Result<ChatEvent>> + Send + 'static>>;
+
+/// Everything the router needs, built once at startup.
+///
+/// The traits are held behind `Arc<dyn ...>` so production wraps Qdrant/rig
+/// while tests inject mocks.
+#[derive(Clone)]
+pub struct AppState {
+    pub retriever: Arc<dyn Retriever>,
+    pub completer: Arc<dyn Completer>,
+    pub site_dir: PathBuf,
+    pub keep_alive: Duration,
+}
 
 /// Retrieves document chunks relevant to a question.
 ///

@@ -16,6 +16,8 @@ pub struct Config {
     pub qdrant: QdrantConfig,
     pub embedding: EmbeddingConfig,
     pub collection: CollectionConfig,
+    /// Defaults for `rig-rag serve`; CLI flags override each field.
+    pub server: Option<ServerConfig>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -36,6 +38,18 @@ pub struct EmbeddingConfig {
 pub struct CollectionConfig {
     /// Name of the active collection. Empty until the first `promote`.
     pub active: String,
+}
+
+/// Optional `[server]` section; absent entirely means all defaults apply.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ServerConfig {
+    /// Address to bind, e.g. `127.0.0.1:8080`.
+    pub bind: Option<String>,
+    /// Directory of built UI assets to serve.
+    pub site_dir: Option<std::path::PathBuf>,
+    /// SSE keep-alive interval in seconds.
+    pub keep_alive_secs: Option<u64>,
 }
 
 impl Config {
@@ -98,6 +112,25 @@ active = ""
         assert_eq!(config.qdrant.url, "http://localhost:6334");
         assert_eq!(config.embedding.model, "bge-small-en-v1.5");
         assert_eq!(config.collection.active, "");
+        assert!(config.server.is_none());
+    }
+
+    #[test]
+    fn parses_optional_server_section() {
+        let raw = format!(
+            "{SAMPLE}\n[server]\nbind = \"0.0.0.0:9000\"\nsite_dir = \"site/dist\"\nkeep_alive_secs = 20\n"
+        );
+        let config = Config::parse(&raw).unwrap();
+        let server = config.server.expect("server section");
+        assert_eq!(server.bind.as_deref(), Some("0.0.0.0:9000"));
+        assert_eq!(server.site_dir.as_deref(), Some(Path::new("site/dist")));
+        assert_eq!(server.keep_alive_secs, Some(20));
+    }
+
+    #[test]
+    fn rejects_unknown_server_field() {
+        let raw = format!("{SAMPLE}\n[server]\nbogus = 1\n");
+        assert!(Config::parse(&raw).is_err());
     }
 
     #[test]

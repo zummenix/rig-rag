@@ -1,7 +1,7 @@
 # rig-rag Web UI — Implementation Plan
 
-Status: **Phase 0 done; Phases 1–5 not yet implemented.** Written 2026-10-08.
-Next session: start at "Phase 1". This document is the source of truth for
+Status: **Phases 0–1 done; Phases 2–5 not yet implemented.** Written 2026-10-08.
+Next session: start at "Phase 2". This document is the source of truth for
 decisions; update it when a phase changes a decision.
 
 Phase 0 landed: `shared` crate (wire types + `k` bounds), `Retriever` /
@@ -9,6 +9,12 @@ Phase 0 landed: `shared` crate (wire types + `k` bounds), `Retriever` /
 `query.rs`, and prompt-assembly / history-cap helpers in `src/serve/chat.rs`.
 One decision changed: `DocHit.score` is `f64`, not `f32` (rig returns `f64`;
 narrowing would make `query` CLI output non-byte-identical).
+
+Phase 1 landed: `rig-rag serve` (axum + `ServeDir`) with `/api/health`,
+`/api/query`, `/api/chat` (SSE); `[server]` config section (`bind`, `site_dir`,
+`keep_alive_secs`) with flags overriding; production impls in `src/serve/prod.rs`.
+Pre-stream failures (retrieval or completer setup) return a plain `500`; only
+failures after the stream starts are `Error` events.
 
 ## Goal
 
