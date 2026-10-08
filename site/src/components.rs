@@ -15,6 +15,7 @@ pub fn Composer(
     busy: RwSignal<bool>,
     placeholder: &'static str,
     on_submit: Callback<String>,
+    should_reset_on_submit: bool,
 ) -> impl IntoView {
     let textarea = NodeRef::<html::Textarea>::new();
 
@@ -31,7 +32,9 @@ pub fn Composer(
             return;
         }
         on_submit.run(question.to_owned());
-        element.set_value("");
+        if should_reset_on_submit {
+            element.set_value("");
+        }
     });
 
     let submit_on_click = submit.clone();
