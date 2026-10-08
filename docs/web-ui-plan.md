@@ -1,8 +1,14 @@
 # rig-rag Web UI — Implementation Plan
 
-Status: **agreed design, not yet implemented.** Written 2026-10-08.
-Next session: start at "Phase 0". This document is the source of truth for
+Status: **Phase 0 done; Phases 1–5 not yet implemented.** Written 2026-10-08.
+Next session: start at "Phase 1". This document is the source of truth for
 decisions; update it when a phase changes a decision.
+
+Phase 0 landed: `shared` crate (wire types + `k` bounds), `Retriever` /
+`Completer` traits in `src/serve/state.rs`, `src/retrieval.rs` extracted from
+`query.rs`, and prompt-assembly / history-cap helpers in `src/serve/chat.rs`.
+One decision changed: `DocHit.score` is `f64`, not `f32` (rig returns `f64`;
+narrowing would make `query` CLI output non-byte-identical).
 
 ## Goal
 
@@ -66,7 +72,7 @@ Routes:
 Types (in `shared`):
 
 ```rust
-struct DocHit { score: f32, path: String, start_line: usize,
+struct DocHit { score: f64, path: String, start_line: usize,
                 end_line: usize, chunk_index: usize, text: String }
 struct Msg { role: Role /* user | assistant */, content: String }
 

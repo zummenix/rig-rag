@@ -9,6 +9,8 @@ pub mod model;
 pub mod promote;
 pub mod prune;
 pub mod query;
+pub mod retrieval;
+pub mod serve;
 pub mod sources;
 pub mod stats;
 pub mod store;

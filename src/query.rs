@@ -1,11 +1,8 @@
 use anyhow::Result;
-use rig::vector_store::{VectorSearchRequest, VectorStoreIndex};
 
-use crate::chunk::DocChunk;
 use crate::config::Config;
+use crate::retrieval::{self, THRESHOLD};
 use crate::store;
-
-const SAMPLES: u64 = 7;
 
 /// Retrieves the chunks most similar to `question` and prints them with their
 /// scores.
@@ -13,19 +10,12 @@ pub async fn run(question: &str) -> Result<()> {
     let config = Config::load()?;
     let vector_store = store::connect(&config).await?;
 
-    let req = VectorSearchRequest::builder()
-        .query(question)
-        .samples(SAMPLES)
-        .threshold(0.5)
-        .build();
-
-    let hits = vector_store.top_n::<DocChunk>(req).await?;
+    let hits = retrieval::search(&vector_store, question, shared::DEFAULT_K, THRESHOLD).await?;
 
     for hit in &hits {
-        let (score, chunk) = (hit.score, &hit.document);
-        let preview = chunk.text.lines().take(6).collect::<Vec<_>>().join("\n");
-        println!("Score: {score}");
-        println!("{} (index={})", chunk.source_location(), chunk.chunk_index);
+        let preview = hit.text.lines().take(6).collect::<Vec<_>>().join("\n");
+        println!("Score: {}", hit.score);
+        println!("{} (index={})", hit.source_location(), hit.chunk_index);
         println!("\n{preview}\n...\n");
     }
 
