@@ -21,11 +21,10 @@ pub async fn run(question: &str) -> Result<()> {
 
     let hits = vector_store.top_n::<DocChunk>(req).await?;
 
-    for (score, id, chunk) in &hits {
+    for (score, _, chunk) in &hits {
         let preview = chunk.text.lines().take(6).collect::<Vec<_>>().join("\n");
         println!("Score: {score}");
-        println!("ID: {id}");
-        println!("{} (index={})", chunk.path, chunk.index);
+        println!("{} (index={})", chunk.source_location(), chunk.chunk_index);
         println!("\n{preview}\n...\n");
     }
 
