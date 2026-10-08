@@ -16,6 +16,7 @@ pub async fn run(question: &str) -> Result<()> {
     let req = VectorSearchRequest::builder()
         .query(question)
         .samples(SAMPLES)
+        .threshold(0.5)
         .build();
 
     let hits = vector_store.top_n::<DocChunk>(req).await?;
