@@ -94,6 +94,21 @@ cargo run -- query -q "how do I squash commits?"
 cargo run -- chat
 ```
 
+### Dev servers
+
+During development two long-running processes are useful:
+
+```sh
+just dev-site   # trunk on :3000, hot-reloads the UI, proxies /api/* to :8080
+just dev-api    # cargo-watch rebuilds + restarts the axum server on :8080
+```
+
+Run them in separate terminals. `dev-site` only watches the UI; `dev-api`
+watches server changes, so frontend edits don't restart the
+backend. `dev-api` needs Qdrant and an active collection, and (for chat) the
+`OPENROUTER_*` vars — `serve` refuses to boot without them. Recompiling
+re-binds `:8080`, so expect a brief blip in the UI during rebuilds.
+
 ## Web UI (`rig-rag serve`)
 
 `serve` loads the same config as `query`/`chat` and **refuses to start** unless
@@ -109,9 +124,6 @@ cd site && trunk build --release && cd ..
 cargo run -- serve
 # -> rig-rag serving on http://127.0.0.1:8080 (site: ./site/dist)
 ```
-
-For UI development, run `cargo run -- serve` and `trunk serve` (from `site/`) in
-separate terminals; `trunk serve` proxies `/api/*` to port 8080.
 
 API: `GET /api/health`, `POST /api/query` (`{"question", "k"?}`), and
 `POST /api/chat` (SSE). Chat is stateless per turn — the client sends the whole

@@ -2,6 +2,14 @@
 default:
     @just --list
 
+# Serve the UI in watch mode (hot reload; proxies /api/* to :8080).
+dev-site:
+    cd site && trunk serve
+
+# Run the API server, rebuilding on server changes.
+dev-api:
+    cargo watch -w Cargo.toml -w src -w shared -x 'run --bin rig-rag -- serve'
+
 # Format all workspace code.
 fmt:
     cargo fmt --all
