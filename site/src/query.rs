@@ -49,7 +49,7 @@ pub fn QueryPage() -> impl IntoView {
         <section class="panel">
             <div class="query-controls">
                 <label>
-                    "Results (k)"
+                    "Results (k) "
                     <input node_ref=k_input type="number" min="1" max="20" value="7" />
                 </label>
                 <span class="field-hint">"1–20"</span>
@@ -59,8 +59,9 @@ pub fn QueryPage() -> impl IntoView {
 
             <Composer
                 busy=loading
-                placeholder="Ask a question about the docs…"
+                placeholder="Enter a query to search in the docs…"
                 on_submit=on_submit
+                should_reset_on_submit=false
             />
 
             {move || error.get().map(|message| view! { <div class="bubble error">{message}</div> })}

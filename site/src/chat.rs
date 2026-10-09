@@ -131,6 +131,7 @@ pub fn ChatPage() -> impl IntoView {
                 busy=busy
                 placeholder="Ask a question about the docs…"
                 on_submit=on_submit
+                should_reset_on_submit=true
             />
         </section>
     }
