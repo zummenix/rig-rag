@@ -96,7 +96,9 @@ cargo run -- chat
 
 ### Dev servers
 
-During development two long-running processes are useful:
+During development two long-running processes are useful. The API watcher
+requires [`cargo-watch`](https://github.com/watchexec/cargo-watch) (`cargo
+install cargo-watch`):
 
 ```sh
 just dev-site   # trunk on :3000, hot-reloads the UI, proxies /api/* to :8080
