@@ -27,4 +27,5 @@ test('query page enforces k in 1..=20', async ({ page }) => {
   await submit(composer, 'just right');
   await expect(inlineError).toHaveCount(0);
   await expect(panel.locator('.doc-card')).toHaveCount(3);
+  await expect(composer).toHaveValue('just right');
 });
