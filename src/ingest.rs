@@ -15,6 +15,16 @@ use crate::{embedding, fetch, hashing, stats, store};
 
 const DOCUMENTS_BATCH_SIZE: usize = 10;
 
+/// Minimum token count for a chunk to be embedded.
+///
+/// The production default is `0` (keep every chunk). The P5 `drop-small-chunks`
+/// experiment sets this to a nonzero threshold to skip the tiniest chunks, which
+/// cost a full embedding but rarely carry an answer; see `docs/eval-plan.md`.
+/// Tokens come from the report tokenizer (`cl100k_base`), an approximation of
+/// the embedding model's WordPiece vocabulary — fine for a relative threshold,
+/// not an exact one.
+pub const MIN_CHUNK_TOKENS: usize = 15;
+
 /// Fetches every configured source, hashes it, and embeds the whole corpus into
 /// a collection named after the corpus prefix, model, and combined hash. Existing
 /// collections are reused untouched unless `force` is set. With `pin`, branch and
@@ -126,20 +136,36 @@ pub async fn run(
     let mut embed_ms = 0u64;
     let mut insert_ms = 0u64;
     let vector_store = store::new_store(client, model.clone(), &target);
+    // Token counts are needed to filter small chunks and, when a report is
+    // written, to summarize them. Without `--report` and with no threshold, no
+    // tokenization runs at all.
+    let need_tokens = report_enabled || filtering_enabled(MIN_CHUNK_TOKENS);
     for documents_batch in documents.chunks(DOCUMENTS_BATCH_SIZE) {
         timers.start();
         let mut batch_chunks: Vec<DocChunk> = Vec::new();
         for document in documents_batch {
             let chunks = chunk_md_doc(&document.path, &document.text);
+            let index = source_index[document.source.as_str()];
             if let Some(ingest_stats) = ingest_stats.as_mut() {
-                let index = source_index[document.source.as_str()];
                 ingest_stats.documents[index] += 1;
-                ingest_stats.chunks[index] += chunks.len();
-                for chunk in &chunks {
-                    ingest_stats.tokens[index].push(report::count_tokens(&chunk.text));
-                }
             }
-            batch_chunks.extend(chunks);
+            for chunk in chunks {
+                let tokens = if need_tokens {
+                    report::count_tokens(&chunk.text)
+                } else {
+                    0
+                };
+                if !is_kept(tokens, MIN_CHUNK_TOKENS) {
+                    continue;
+                }
+                if let Some(ingest_stats) = ingest_stats.as_mut() {
+                    ingest_stats.chunks[index] += 1;
+                    if need_tokens {
+                        ingest_stats.tokens[index].push(tokens);
+                    }
+                }
+                batch_chunks.push(chunk);
+            }
         }
         chunk_ms += timers.stop();
 
@@ -180,6 +206,19 @@ pub async fn run(
         println!("Wrote ingest report to {}", path.display());
     }
     Ok(())
+}
+
+/// Whether a chunk with `tokens` tokens survives the `min` threshold. A
+/// threshold of `0` keeps every chunk.
+fn is_kept(tokens: usize, min: usize) -> bool {
+    min == 0 || tokens >= min
+}
+
+/// Whether a token threshold filters anything at all (a threshold of `0` keeps
+/// every chunk). Kept separate from the constant so the filtering decision stays
+/// a runtime value the P5 experiment can vary.
+fn filtering_enabled(min: usize) -> bool {
+    min > 0
 }
 
 /// Wall-clock phase timers. All measurement is skipped when `enabled` is false,
@@ -338,6 +377,7 @@ fn assemble_report(
         collection: inputs.target.to_string(),
         prefix: inputs.config.corpus.prefix.clone(),
         force: inputs.force,
+        min_chunk_tokens: MIN_CHUNK_TOKENS,
         model: report::ModelInfo {
             slug: inputs.config.embedding.model.clone(),
             dimensions,
@@ -388,6 +428,28 @@ fn load_documents(sources: &Sources, data_root: impl AsRef<Path>) -> Result<Vec<
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn chunk_threshold_keeps_everything_at_zero() {
+        assert!(is_kept(0, 0));
+        assert!(is_kept(1, 0));
+        assert!(is_kept(1000, 0));
+    }
+
+    #[test]
+    fn chunk_threshold_drops_below_min() {
+        assert!(!is_kept(0, 50));
+        assert!(!is_kept(49, 50));
+        assert!(is_kept(50, 50));
+        assert!(is_kept(51, 50));
+    }
+
+    #[test]
+    fn filtering_is_off_at_zero_threshold() {
+        assert!(!filtering_enabled(0));
+        assert!(filtering_enabled(1));
+        assert!(filtering_enabled(50));
+    }
 
     #[test]
     fn load_documents_ignores_unlisted_directories() {
@@ -462,6 +524,7 @@ data_root = "data/single-project"
 
         assert_eq!(report.profile, "single-project");
         assert_eq!(report.prefix, "eval-single-project");
+        assert_eq!(report.min_chunk_tokens, MIN_CHUNK_TOKENS);
         assert_eq!(report.totals.documents, 2);
         assert_eq!(report.totals.chunks, 3);
         assert_eq!(report.totals.tokens, 220);
