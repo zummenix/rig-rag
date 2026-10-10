@@ -1,6 +1,6 @@
 # Evaluation harness plan
 
-Status: **P1 implemented; P2–P5 pending.** This document records the decisions
+Status: **P1–P2 implemented; P3–P5 pending.** This document records the decisions
 taken for preparing `rig-rag` for experiments and evaluation. Work proceeds phase
 by phase (see [Phases](#phases)); Phase 1 is minimal Rust-only setup.
 
@@ -103,12 +103,12 @@ eval/profiles/
       "documents": 0, "chunks": 0, "tokens": 0,
       "chunk_tokens": {
         "min": 0, "max": 0, "mean": 0.0, "p50": 0, "p90": 0,
-        "buckets": { "<50": 0, "50-100": 0, "100-200": 0, "200-400": 0, ">400": 0 }
+        "buckets": { "<50": 0, "50-99": 0, "100-199": 0, "200-399": 0, ">=400": 0 }
       }
     }
   ],
   "totals": { "documents": 0, "chunks": 0, "tokens": 0, "embeddings": 0 },
-  "environment": { "os": "macos", "arch": "aarch64", "rig_rag_commit": "...", "qdrant_url": "..." }
+  "environment": { "os": "macos", "arch": "aarch64", "qdrant_url": "..." }
 }
 ```
 
@@ -277,6 +277,29 @@ tiktoken tokens, chunk-token distribution, environment block.
 
 **Acceptance:** report JSON validates against `schema_version: 1`; no tokenizer or
 timing work runs without `--report`; `status`/`reused` paths produce a report too.
+
+**Done.** `src/report.rs` defines the versioned schema (`schema_version: 1`),
+the `tiktoken:cl100k_base` counter, the chunk-token summary (`min`/`max`/`mean`/
+`p50`/`p90` + `<50`/`50-99`/`100-199`/`200-399`/`>=400` buckets), and the
+`environment`/`memory` blocks. `ingest --report <path>` writes it; per-phase
+timings (`fetch`/`load`/`chunk`/`embed`/`insert`/`total`), per-source counts,
+and totals are gathered only when the flag is given (`status` is
+`created`/`reused`/`rebuilt`, and the `reused` no-op path writes a report too).
+Portable peak RSS now comes from `libc::getrusage` (macOS bytes, Linux KiB) so
+the printed "Peak RSS" works on the dev host; cgroup v2 peak stays
+Linux-container-only. Counts and tokenization are skipped entirely without
+`--report`. `just check` passes; unit tests cover the schema round-trip, the
+tokenizer, bucket/percentile math, profile derivation, report writing, and
+per-source aggregation.
+
+The report deliberately does **not** record a rig-rag commit: the runtime image
+has no `.git` and no `git` binary, so runtime detection would be null in exactly
+the containerized runs we care about, and it would report the surrounding
+checkout rather than the built binary. The Python runner owns the measured
+commit in `results.json`.
+
+Known gap: token counts use `cl100k_base`, not BGE's WordPiece vocabulary
+(approximation only; see open risks).
 
 ### P3 — Eval assets + Python retrieval runner
 

@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::Path;
 
 use chunkedrs::Chunk;
 use serde::{Deserialize, Serialize};
@@ -44,7 +44,7 @@ impl rig::Embed for DocChunk {
 }
 
 /// Splits document into chunks.
-pub fn chunk_md_doc((path, doc): &(PathBuf, String)) -> Vec<DocChunk> {
+pub fn chunk_md_doc(path: &Path, doc: &str) -> Vec<DocChunk> {
     let doc = Document::new(doc);
     let chunks = chunkedrs::chunk(doc.text)
         .markdown()
