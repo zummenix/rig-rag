@@ -69,7 +69,7 @@ until you promote something; until then `serve` exits with a clear error.
 
 | Command | Description |
 | --- | --- |
-| `rig-rag ingest [--force]` | Fetch sources, embed the corpus, insert into a new collection |
+| `rig-rag ingest [--force] [--report <path>]` | Fetch sources, embed the corpus, insert into a new collection (optionally write a JSON report) |
 | `rig-rag serve` | Serve the retrieval/chat API + built UI over HTTP |
 | `rig-rag promote <collection>` | Set the active collection in `rig-rag.toml` |
 | `rig-rag prune [--yes]` | Delete collections other than the active one (dry run without `--yes`) |
@@ -209,3 +209,7 @@ OPENROUTER_MODEL_NAME=openai/gpt-5-mini
 - A changed corpus builds a whole new collection: every source is re-embedded.
 - `rig-rag ingest` prints peak process RSS and, in a container, the cgroup
   memory peak.
+- `ingest --report <path>` additionally writes a schema-versioned JSON report
+  (per-phase timings, memory, per-source/total counts, and a `cl100k_base`
+  chunk-token distribution). Nothing extra — in particular no tokenization or
+  timing — runs when the flag is absent.

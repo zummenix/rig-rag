@@ -38,6 +38,7 @@ chunkedrs = "2.1.1"
 clap = { version = "4", features = ["derive"] }
 futures = "0.3"
 hex = "0.4"
+libc = "0.2"
 qdrant-client = "1.19"
 rig = { version = "0.44", features = ["fastembed"] }
 rig-qdrant = "0.44"
@@ -45,6 +46,7 @@ serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0"
 sha2 = "0.11"
 shared = { path = "shared" }
+tiktoken = { version = "4.1.1", default-features = false, features = ["vocab-cl100k_base"] }
 tokio = { version = "1.53.2", features = ["macros", "net", "rt-multi-thread", "time"] }
 toml = "1.1"
 toml_edit = "0.25"

@@ -31,6 +31,9 @@ enum Command {
         /// Rewrite branch/tag refs in the sources file to resolved commit SHAs
         #[arg(long)]
         pin: bool,
+        /// Write a JSON ingest report (timings, memory, counts, tokens) to this path
+        #[arg(long, value_name = "PATH")]
+        report: Option<PathBuf>,
     },
     /// Serve the retrieval and chat API over HTTP (and the built UI, if present)
     Serve {
@@ -63,7 +66,9 @@ async fn main() -> Result<()> {
     let sources = cli.sources;
 
     match cli.command {
-        Command::Ingest { force, pin } => ingest::run(force, pin, config, sources).await,
+        Command::Ingest { force, pin, report } => {
+            ingest::run(force, pin, report, config, sources).await
+        }
         Command::Serve { bind, site_dir } => {
             serve::run(serve::ServeArgs {
                 bind,

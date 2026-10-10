@@ -12,14 +12,39 @@ pub fn report_memory() {
     }
 }
 
-fn peak_rss_bytes() -> Option<u64> {
-    let status = fs::read_to_string("/proc/self/status").ok()?;
-    let line = status.lines().find(|line| line.starts_with("VmHWM:"))?;
-    let kib: u64 = line.split_whitespace().nth(1)?.parse().ok()?;
-    Some(kib * 1024)
+/// Peak resident set size of this process in bytes, via `getrusage`. Returns
+/// `None` on platforms without `getrusage` or when the call fails. Used both by
+/// the CLI summary and the `ingest --report` memory block.
+#[cfg(unix)]
+pub fn peak_rss_bytes() -> Option<u64> {
+    // `ru_maxrss` is a `c_long`; platforms disagree on its unit.
+    unsafe {
+        let mut usage: libc::rusage = std::mem::zeroed();
+        if libc::getrusage(libc::RUSAGE_SELF, &mut usage) != 0 {
+            return None;
+        }
+        let max_rss = u64::try_from(usage.ru_maxrss).ok()?;
+        // macOS reports bytes, Linux (and the other unixes we build for) report
+        // kibibytes.
+        #[cfg(target_os = "macos")]
+        {
+            Some(max_rss)
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            Some(max_rss * 1024)
+        }
+    }
 }
 
-fn cgroup_peak_bytes() -> Option<u64> {
+#[cfg(not(unix))]
+pub fn peak_rss_bytes() -> Option<u64> {
+    None
+}
+
+/// cgroup v2 peak memory in bytes; `None` outside a Linux container with the
+/// memory controller exposed.
+pub fn cgroup_peak_bytes() -> Option<u64> {
     fs::read_to_string("/sys/fs/cgroup/memory.peak")
         .ok()?
         .trim()
