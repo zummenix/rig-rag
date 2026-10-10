@@ -1,0 +1,81 @@
+# Versioned retrieval-eval question set.
+#
+# Each question names the corpus profile(s) it applies to and the gold evidence
+# a correct retrieval should surface. The set is authored multi-project first;
+# the single-project set is its `jj`-only subset, and `eval/tests` asserts that
+# structural property.
+#
+# Fields:
+#   id           stable identifier (ASCII, unique)
+#   question     the natural-language query sent to /api/query
+#   applies_to   profile names this question is evaluated against
+#   gold         list of { source, path, lines?, must_contain? }; `[]` marks an
+#                unanswerable question
+#   notes        authoring rationale
+#
+# Gold matching (see eval/runner/gold.py): a retrieved hit covers a gold item
+# when the hit's source equals `source`, the hit path ends with `path` (as a
+# whole path suffix), the hit's `[start_line, end_line]` overlaps `lines` when
+# present, and `must_contain` occurs in the hit text when present.
+
+[[question]]
+id = "jj-author"
+question = "Who is the author of jj?"
+applies_to = ["single-project", "multi-project"]
+gold = [
+  { source = "jj", path = "testimonials.md", must_contain = "project creator and leader" },
+]
+notes = "The answer is worded 'project creator and leader'; the word 'author' appears only in unrelated design-doc metadata, so this measures paraphrase robustness."
+
+[[question]]
+id = "jj-config-set-user"
+question = "How do I set a configuration value for my user with jj?"
+applies_to = ["single-project", "multi-project"]
+gold = [
+  { source = "jj", path = "config.md", must_contain = "jj config set --user" },
+]
+notes = "How-to / procedural. The command form is `jj config set --user <key> <value>`."
+
+[[question]]
+id = "jj-new-change"
+question = "How do I start a new change (commit) in jj?"
+applies_to = ["single-project", "multi-project"]
+gold = [
+  { source = "jj", path = "tutorial.md", must_contain = "That is what `jj new` is for" },
+]
+notes = "API / reference. `jj new` creates a new commit on top of the current working-copy commit."
+
+[[question]]
+id = "podman-detached-run"
+question = "How do I run a container in the background (detached) with podman?"
+applies_to = ["multi-project"]
+gold = [
+  { source = "podman", path = "tutorials/podman_tutorial.md", must_contain = "podman run --name basic_httpd -d" },
+]
+notes = "How-to. Podman uses -d/--detach for detached mode. Multi-project only (no podman in the single-project corpus)."
+
+[[question]]
+id = "qdrant-docker-ports"
+question = "Which host ports does the Qdrant Docker container publish for its REST and gRPC APIs?"
+applies_to = ["multi-project"]
+gold = [
+  { source = "qdrant", path = "quickstart.md", must_contain = "docker run -p 6333:6333 -p 6334:6334" },
+]
+notes = "Setup / reference. REST is 6333 and gRPC is 6334. Multi-project only."
+
+[[question]]
+id = "cross-project-config"
+question = "How do I set a configuration value in the CLI?"
+applies_to = ["multi-project"]
+gold = [
+  { source = "jj", path = "config.md", must_contain = "jj config set" },
+  { source = "podman", path = "source/markdown/podman.1.md", must_contain = "--config" },
+]
+notes = "Cross-project ambiguity: 'config' is a term common to several projects, so this measures cross-corpus competition and source purity."
+
+[[question]]
+id = "unanswerable-license"
+question = "What license is the jj source code released under, and why was it chosen?"
+applies_to = ["multi-project"]
+gold = []
+notes = "Negative / unanswerable. The corpus mentions only an image license and a Contributor License Agreement, not the project's source license or its rationale. Metrics report the no-hit rate instead of recall."

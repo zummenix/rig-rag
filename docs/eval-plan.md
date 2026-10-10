@@ -1,8 +1,10 @@
 # Evaluation harness plan
 
-Status: **P1–P2 implemented; P3–P5 pending.** This document records the decisions
+Status: **P1–P3 implemented; P4–P5 pending.** This document records the decisions
 taken for preparing `rig-rag` for experiments and evaluation. Work proceeds phase
-by phase (see [Phases](#phases)); Phase 1 is minimal Rust-only setup.
+by phase (see [Phases](#phases)); the Rust plumbing (P1–P2) and the Python
+retrieval runner (P3) have landed, and P3 is validated end-to-end on **both**
+profiles (degradation deltas populated).
 
 ## Goal
 
@@ -309,6 +311,63 @@ runner; metrics + `results.json` + `hits.jsonl`; degradation deltas; subset test
 **Acceptance:** a full single- and multi-project run produces results JSON that
 covers every applicable question and profile, with p50/p95 and deltas populated.
 
+**Done.** `eval/questions.toml` holds the seed set: three `jj` questions applying
+to both profiles (paraphrase, how-to, and reference), plus `podman`, `qdrant`,
+one cross-project, and one unanswerable question applying to multi-project only.
+The runner lives under `eval/runner/` (`profiles`, `gold`, `metrics`,
+`httpquery`, `serve`, `rigrag`, `results`, `run`, `__main__`) and is stdlib-only
+(Python 3.11+, no third-party packages). It discovers profiles, validates the
+question set (asserting the single⊆multi subset and gold-source applicability),
+runs the real `ingest --report` → `promote` → `serve` lifecycle on a free
+loopback port, sweeps the contract grid k∈{1,3,5,7,10,20} by default (`--k`
+may select any non-empty subset, recorded top-level as `k_values`), measures
+p50/p95 at `--latency-k` (default 7, and validated to be one of `--k` before any
+work), and writes `eval/results/<experiment>/<run>/{results.json,hits.jsonl}`
+plus the ingest report and serve log. `results.json` is a versioned contract
+(`schema_version: 1`) carrying per-question `by_k` metrics for the recorded
+`k_values`, per-profile `summary` aggregates (including the unanswerable no-hit
+rate), and `single-project->multi-project` `degradation` deltas over the shared
+questions — every `@k` label is derived from the recorded set and the run's
+`latency_k`, never a hardcoded default.
+`eval/tests/` (65 offline `unittest`s, including a stub HTTP server) covers
+question parsing/validation, gold matching, metric math, the results contract
+(a `k` subset and a non-default `latency_k` are locked by regression tests), CLI
+`--k`/`--latency-k` validation, profile parsing, binary resolution, and profile
+selection. `just eval-test` / `just eval-run`, `.gitignore` entries for raw
+dumps, and `eval/README.md` document it.
+
+Validated end-to-end on **both profiles** (2026-10-10): the pinned sparse+SHA
+fetch (the P1 known gap) succeeded for `jj`, `podman`, and `qdrant` at the exact
+SHAs in the P1 table. `single-project` ingested 52 documents / 793 chunks
+(`eval-single-project-…-f017d3d86bc1`, 9.0 GiB peak RSS); `multi-project`
+ingested 3,718 documents / 9,956 chunks across the three sources
+(`eval-multi-project-…-a3ea89d89f3c`). Both `serve` lifecycles booted and tore
+down cleanly; `results.json` is exactly reproducible from `hits.jsonl` (checked
+by re-deriving every `by_k` entry through the gold matcher). Baseline
+(`commit f57809d`): single p50 8.10 ms / p95 10.17 ms, `mean_recall@k = 1/3`;
+multi p50 9.43 ms / p95 11.33 ms, `mean_recall@10 = 1/3`; the shared-question
+degradation is `recall@k = 0.0`, `purity@7 = 0.0`, `p95_ms = +1.15 ms` (adding
+podman + qdrant did not change `jj` recall at these k).
+
+Baseline findings (real retrieval behavior, not harness bugs):
+
+- `jj-new-change` hits at k=1; `jj-author` never surfaces the paraphrase marker
+  in the top 20; `jj-config-set-user` retrieves the phrase from a different file
+  (rejected by the gold path check) in both profiles.
+- `qdrant-docker-ports` is a hit from k=8 up (the `docker run -p 6333…`
+  quickstart chunk ranks 8th), which is why multi `mean_recall` rises from 1/6
+  at k=7 to 1/3 at k=10.
+- The **unanswerable** question returns hits at every k (`no_hit_rate = 0.0`)
+  at `THRESHOLD = 0.5`: semantically-adjacent `jj` config chunks clear the
+  threshold. Either the threshold is too low for a clean negative or the
+  question needs to be further from the corpus — worth resolving before the
+  baseline is frozen.
+
+Known gap: the runner inherits `serve`'s requirement for `OPENROUTER_*` because
+`serve` builds the chat agent at startup, even though retrieval needs no LLM.
+Running retrieval-only without a key would need an opt-in `serve` flag; deferred
+to keep production behavior unchanged.
+
 ### P4 — Report framework
 
 `eval/report/framework/`, `eval/experiments/<id>/report.py`, `eval/reports/<id>.html`;
@@ -332,13 +391,34 @@ query-eval runner supplies recall/purity/latency deltas versus the baseline.
   numbers are approximations. Revisit with an HF `tokenizers` path if embedding
   cost math needs to be exact (drop-in for the `tokenizer` field).
 - **Sparse-`--pin` correctness.** Detached checkout for a SHA with `--filter=blob:none
-  --sparse` needs verification across the pinned sources.
+  --sparse` is verified for `jj`, `podman`, and `qdrant` (both profiles,
+  2026-10-10); each checked out at its pinned SHA.
 - **Profile drift.** Pinned SHAs freeze corpora; decide how/when to refresh pins
   (and whether a refresh is itself an experiment).
 - **Latency noise.** Host/Qdrant warmth affects p95; record environment and keep
   warmups/reps consistent; consider containerized runs for comparability later.
 - **Result size.** `hits.jsonl` + `results.json` per run can grow; keep raw dumps
   per-run and committed summary small (or gitignore raw dumps if needed).
+- **Artifact path portability — TODO before freezing a baseline.** The runner
+  records absolute host paths in committed artifacts: `results.json` →
+  `environment.binary` and each `ingest-*.json` → `config`/`sources` are
+  `/Users/<user>/…`. Record repo-relative paths instead (the runner already runs
+  with `cwd=repo_root`, so pass relative `--config`/`--sources` and store a
+  relative binary path), then re-run. Not yet implemented.
+- **Measured-commit reachability under jj — TODO before freezing a baseline.**
+  The plan requires the measured commit to stay in history, but in this
+  jj-colocated repo `git rev-parse HEAD` at run time can capture a transient jj
+  export that a later jj operation abandons. The multi-project baseline recorded
+  `f57809d`, which is reflog-only and **not** an ancestor of `HEAD` — i.e.
+  unreproducible from a clean clone. Have the runner verify (or make) the
+  measured commit reachable — e.g. tag/bookmark it at run time, or run from a
+  stable git commit that won't be rewritten. The abandoned
+  `eval/results/baseline/*` candidates should be dropped rather than committed.
+- **Unanswerable question is not a clean negative.** At `THRESHOLD = 0.5` the
+  `unanswerable-license` question returns hits at every k (`no_hit_rate = 0.0`).
+  Resolve (raise the threshold, or move the negative further from the corpus)
+  before freezing the baseline, since P5's "no material loss" is measured
+  against it.
 
 ## Deferred (future passes)
 

@@ -24,5 +24,13 @@ check:
 test-site:
     cd site/tests && npm install && npx playwright test
 
-# Everything: Rust workspace checks plus the UI e2e suite.
-check-all: check test-site
+# Run the offline Python eval-runner unit tests (stdlib unittest).
+eval-test:
+    python3 -m unittest discover -s eval/tests -t .
+
+# Run the retrieval-eval runner; pass flags after `--`, e.g. `just eval-run --profiles single-project`.
+eval-run *args:
+    python3 -m eval.runner {{args}}
+
+# Everything: Rust workspace checks, the UI e2e suite, and the eval-runner tests.
+check-all: check test-site eval-test

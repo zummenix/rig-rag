@@ -8,3 +8,12 @@ site/target/
 site/tests/node_modules/
 site/tests/test-results/
 site/tests/playwright-report/
+
+# Python (eval runner)
+__pycache__/
+*.pyc
+
+# Eval raw dumps (results.json is the committed artifact)
+eval/results/**/hits.jsonl
+eval/results/**/serve-*.log
+
