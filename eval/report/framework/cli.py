@@ -74,7 +74,10 @@ def build_parser(experiment: str) -> argparse.ArgumentParser:
     parser.add_argument(
         "--commit",
         default=None,
-        help="measured commit for an ingest-only report (no sibling results.json declares one)",
+        help=(
+            "measured commit for a report without a retrieval part "
+            "(defaults to the sibling results.json's commit)"
+        ),
     )
     parser.add_argument(
         "--out",
@@ -115,18 +118,25 @@ def report_main(
     else:
         ingest_paths = []
 
-    if args.no_retrieval:
-        results_path = None
     if args.no_ingest:
         ingest_paths = []
 
-    if results_path is None and not ingest_paths:
+    # Load the retrieval part before applying --no-retrieval: even when its
+    # section is suppressed, its sibling results.json declares the measured
+    # commit the ingest report shows. An explicit --commit overrides it.
+    results = loader.load_results(results_path) if results_path is not None else None
+    commit = args.commit or ((results or {}).get("commit") or None)
+
+    if args.no_retrieval:
+        results_path = None
+        results = None
+
+    if results is None and not ingest_paths:
         raise loader.ResultsError(
             f"no report parts to render for {experiment!r} "
             "(no results.json and no ingest-*.json selected)"
         )
 
-    results = loader.load_results(results_path) if results_path is not None else None
     ingest_docs = [ingest_contract.load_ingest(path) for path in ingest_paths]
 
     baseline_ref = None if args.no_baseline else (args.baseline or baseline)
@@ -147,7 +157,7 @@ def report_main(
         notes=notes,
         results_path=repo_relative(results_path, root) if results_path is not None else None,
         ingest_paths=[repo_relative(path, root) for path in ingest_paths],
-        commit=args.commit,
+        commit=commit,
         experiment=experiment,
     )
     out_path.parent.mkdir(parents=True, exist_ok=True)

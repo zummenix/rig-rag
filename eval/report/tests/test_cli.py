@@ -145,6 +145,23 @@ class ReportMainTest(unittest.TestCase):
             self.assertNotIn("Retrieval quality", html)
             self.assertIn('id="ingestion"', html)
 
+    def test_no_retrieval_keeps_sibling_declared_commit(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            make_repo(root, ["2026-01-01T00-00-00Z"])
+            run_dir = root / "eval" / "results" / "baseline" / "2026-01-01T00-00-00Z"
+            shutil.copyfile(
+                FIXTURES / "ingest" / "v1" / "ingest-single-project.json",
+                run_dir / "ingest-single-project.json",
+            )
+            with quiet_stdout():
+                report_main(experiment="baseline", repo_root=root, argv=["--no-retrieval"])
+            html = (root / "eval" / "reports" / "baseline.html").read_text(encoding="utf-8")
+            self.assertNotIn("Retrieval quality", html)
+            self.assertIn('id="ingestion"', html)
+            # the suppressed retrieval part's declared commit still reaches provenance
+            self.assertIn("f57809d1c2b3a4d5e6f708192a3b4c5d6e7f8091", html)
+
     def test_both_parts_disabled_raises(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
