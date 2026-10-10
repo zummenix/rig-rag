@@ -55,6 +55,24 @@ class ValidateIngestTest(unittest.TestCase):
         with self.assertRaises(IngestError):
             validate_ingest({"schema_version": 1})
 
+    def test_totals_only_document_is_rejected(self):
+        # This shape used to pass and then crash the renderer at
+        # `svg.waterfall([])`; it must be an IngestError before rendering now.
+        with self.assertRaises(IngestError):
+            validate_ingest({"schema_version": 1, "totals": {}})
+
+    def test_empty_timing_is_rejected(self):
+        document = load_ingest(FIXTURES / "ingest" / "v1" / "ingest-single-project.json")
+        document["timing_ms"] = {}
+        with self.assertRaises(IngestError):
+            validate_ingest(document)
+
+    def test_non_numeric_timing_phase_is_rejected(self):
+        document = load_ingest(FIXTURES / "ingest" / "v1" / "ingest-single-project.json")
+        document["timing_ms"]["embed"] = "fast"
+        with self.assertRaises(IngestError):
+            validate_ingest(document)
+
 
 class CostMeasuredTest(unittest.TestCase):
     def test_created_is_measured(self):
