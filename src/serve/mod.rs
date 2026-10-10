@@ -28,14 +28,14 @@ use tower_http::services::ServeDir;
 use crate::config::Config;
 use state::AppState;
 
-/// Default address `serve` binds when no flag or config value is given.
+/// Default address the server binds when no flag or config value is given.
 pub const DEFAULT_BIND: &str = "127.0.0.1:8080";
 /// Default directory of built UI assets.
 pub const DEFAULT_SITE_DIR: &str = "./site/dist";
 /// Default SSE keep-alive interval.
 pub const DEFAULT_KEEP_ALIVE: Duration = Duration::from_secs(15);
 
-/// Flags for the `serve` subcommand; each falls back to `[server]`, then a default.
+/// Flags that configure the server; each falls back to `[server]`, then a default.
 pub struct ServeArgs {
     pub bind: Option<String>,
     pub site_dir: Option<PathBuf>,

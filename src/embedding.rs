@@ -18,7 +18,8 @@ pub fn model_from_slug(slug: &str) -> Result<FastembedModel> {
 }
 
 /// Loads the embedding model named by `slug`. Every command embeds through this,
-/// so the model identity and settings stay consistent between ingest and query.
+/// so the model identity and settings stay consistent between ingestion and
+/// retrieval.
 pub fn load_slug(slug: &str) -> Result<EmbeddingModel> {
     load_model(model_from_slug(slug)?, slug)
 }

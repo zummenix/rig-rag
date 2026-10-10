@@ -65,9 +65,11 @@ RUN cd site && trunk build --release \
 # --- Runtime stage -----------------------------------------------------------
 FROM debian:bookworm-slim AS runtime
 
-# git: source fetching (fetch.rs); libssl3: native-tls; libgomp1: onnxruntime.
+# libssl3: native-tls; libgomp1: onnxruntime; ca-certificates: TLS roots for
+# the OpenRouter call. Source fetching (and its `git` dependency) happens on the
+# host, so the runtime image does not need git.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends git ca-certificates libssl3 libgomp1 \
+    && apt-get install -y --no-install-recommends ca-certificates libssl3 libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /app/ort-libs/ /usr/local/lib/

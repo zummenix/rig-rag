@@ -4,7 +4,7 @@ use crate::config::{self, CONFIG_PATH, Config};
 use crate::store;
 
 /// Makes `collection` the active one by rewriting `[collection].active` in the
-/// config file. The next `query`/`chat` picks it up.
+/// config file. The next server start picks it up.
 pub async fn run(collection: &str) -> Result<()> {
     let config = Config::load()?;
     let client = store::client(&config.qdrant.url)?;
