@@ -17,3 +17,7 @@ __pycache__/
 eval/results/**/hits.jsonl
 eval/results/**/serve-*.log
 
+# Generated HTML reports — regenerate from the committed results.json
+# (`just eval-report <id>`). The inputs, not the rendered page, are committed.
+eval/reports/
+

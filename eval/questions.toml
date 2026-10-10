@@ -74,8 +74,8 @@ gold = [
 notes = "Cross-project ambiguity: 'config' is a term common to several projects, so this measures cross-corpus competition and source purity."
 
 [[question]]
-id = "unanswerable-license"
-question = "What license is the jj source code released under, and why was it chosen?"
+id = "unanswerable-geography"
+question = "What is the tallest mountain in South America?"
 applies_to = ["multi-project"]
 gold = []
-notes = "Negative / unanswerable. The corpus mentions only an image license and a Contributor License Agreement, not the project's source license or its rationale. Metrics report the no-hit rate instead of recall."
+notes = "Negative / unanswerable control: nothing in the corpus is relevant. Its best-scoring chunk is ~0.46, below THRESHOLD (0.5), so no hit is returned at any k. Metrics report the no-hit rate instead of recall."

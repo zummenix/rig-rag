@@ -1,10 +1,11 @@
 # Evaluation harness plan
 
-Status: **P1–P3 implemented; P4–P5 pending.** This document records the decisions
+Status: **P1–P4 implemented; P5 pending.** This document records the decisions
 taken for preparing `rig-rag` for experiments and evaluation. Work proceeds phase
-by phase (see [Phases](#phases)); the Rust plumbing (P1–P2) and the Python
-retrieval runner (P3) have landed, and P3 is validated end-to-end on **both**
-profiles (degradation deltas populated).
+by phase (see [Phases](#phases)); the Rust plumbing (P1–P2), the Python
+retrieval runner (P3), and the HTML report framework (P4) have landed. P3 is
+validated end-to-end on **both** profiles (degradation deltas populated). P4
+renders retrieval only; ingestion reporting is deliberately folded into P5.
 
 ## Goal
 
@@ -42,10 +43,11 @@ and reported as self-contained HTML.
 | Eval metrics | Per question × profile × k∈{1,3,5,7,10,20}: hits, hit@k, recall@k, precision@k, MRR@k, source purity; p50/p95 latency; single→multi **degradation deltas**. |
 | Question set | One versioned `eval/questions.toml` with `applies_to`; single-project ⊂ multi-project is structural. |
 | Experiment record | One `eval/experiments/<id>.md` per experiment: narrative + embedded JSON summary + the exact `sources.json`/`rig-rag.toml` used + the measured **git commit SHA**. |
-| Reports | Shared framework + **one thin `report.py` per experiment** → self-contained HTML. Results JSON is a **versioned, unit-tested contract** so old experiments stay renderable. |
+| Reports | Shared framework + **one thin `report.py` per experiment** → self-contained HTML, **regenerated on demand** (gitignored, not committed). Results JSON is a **versioned, unit-tested contract** so any old experiment stays renderable. |
+| Report parts | Retrieval (`results.json`) and ingestion (`ingest-<profile>.json`) are **independent, separately versioned artifacts**; the framework composes whichever parts a run contains, selectable per part. Ingestion rendering is **deferred to P5**. |
 | Report design | Neutral technical-report style built from scratch; inline SVG charts; no external assets. |
 | Commit identity | Record the **git commit SHA** (not a jj change-id) — portable for git-only users; jj users get the same SHA. |
-| Commit reachability | The runner refuses uncommitted tracked changes and requires `HEAD` to be contained by a pushed remote ref; `results.json` records `commit_ref`. No tags/bookmarks (easy to forget to push). Reports persist. |
+| Commit reachability | The runner refuses uncommitted tracked changes and requires `HEAD` to be contained by a pushed remote ref; `results.json` records `commit_ref`. No tags/bookmarks (easy to forget to push). The committed results JSON keeps every experiment renderable. |
 
 ## Corpus profiles
 
@@ -223,12 +225,22 @@ Candidate `results.json` shape (subject to P3 refinement):
 - `eval/report/framework/` — results loader (version-aware), inline-SVG chart
   primitives (recall@k line, latency bars, degradation deltas), and a layout.
 - `eval/experiments/<id>/report.py` — a thin per-experiment script using the framework.
-- Output: `eval/reports/<id>.html` — self-contained (all CSS/SVG inline, no network).
+- Output: `eval/reports/<id>.html` — self-contained (all CSS/SVG inline, no
+  network); **generated and gitignored**, regenerated from the committed
+  `results.json` (`just eval-report <id>`).
 - **Compatibility is a tested contract:** `eval/report/tests/` holds a fixture
   `results.json` per `schema_version` and asserts it still renders; the framework
   refuses unknown future versions with a clear message.
 - The results JSON is a committed artifact, so any previous experiment can be
   re-rendered.
+- **Two artifacts, composed at render time (deferred to P5).** Retrieval
+  (`results.json`) and ingestion (`ingest-<profile>.json`) are independent,
+  separately versioned contracts. The framework will load each with its own
+  supported-version list and render whichever parts a run contains, so
+  ingest-only, retrieval-only, and combined documents are all valid. The
+  ingestion section leads with `status` and marks a `reused` report as "cost not
+  measured" (a reused collection records no counts/tokens); commit provenance
+  comes from a sibling `results.json`, else from a declared commit.
 
 ## Experiment lifecycle (jj + git)
 
@@ -239,7 +251,9 @@ change-id, so a git-only reader can check out the exact measured code.
 2. Run `ingest` (with `--report`) and the query-eval runner against it.
 3. Write `eval/experiments/<id>.md`: hypothesis, controlled change, measured
    git commit SHA, embedded JSON summary, and the profile `sources.json`/`rig-rag.toml`.
-4. Commit the report. If the experiment is unsuccessful, **revert only the code**
+4. Commit the results JSON (and the experiment record `eval/experiments/<id>.md`);
+   the HTML report is regenerated from it (`just eval-report <id>`), so it is
+   **not** committed. If the experiment is unsuccessful, **revert only the code**
    in a new commit and merge — the measured commit stays in history, so the hash
    remains reproducible while the eval docs persist.
 
@@ -358,11 +372,10 @@ Baseline findings (real retrieval behavior, not harness bugs):
 - `qdrant-docker-ports` is a hit from k=8 up (the `docker run -p 6333…`
   quickstart chunk ranks 8th), which is why multi `mean_recall` rises from 1/6
   at k=7 to 1/3 at k=10.
-- The **unanswerable** question returns hits at every k (`no_hit_rate = 0.0`)
-  at `THRESHOLD = 0.5`: semantically-adjacent `jj` config chunks clear the
-  threshold. Either the threshold is too low for a clean negative or the
-  question needs to be further from the corpus — worth resolving before the
-  baseline is frozen.
+- The **unanswerable** question returned hits at every k (`no_hit_rate = 0.0`)
+  at `THRESHOLD = 0.5`: semantically-adjacent `jj` config chunks cleared the
+  threshold. Resolved by moving the negative further from the corpus (see Open
+  questions / risks); the question set was updated after this baseline.
 
 Known gap: the runner inherits `serve`'s requirement for `OPENROUTER_*` because
 `serve` builds the chat agent at startup, even though retrieval needs no LLM.
@@ -377,6 +390,29 @@ versioned-schema fixtures + compatibility tests.
 **Acceptance:** a committed `results.json` (and a prior-version fixture) render to
 self-contained HTML; unknown schema versions fail loudly.
 
+**Done.** `eval/report/framework/` (`loader`, `svg`, `layout`, `render`, `cli`)
+turns a loaded `results.json` into one self-contained HTML document — inline CSS
+and inline SVG, no scripts, external fonts, or network references. The report
+covers provenance (measured commit, pushed containing ref, environment), a
+per-profile summary, mean recall@k plus a per-question breakdown, latency, the
+cross-corpus degradation deltas, and the exact measured configuration.
+`eval/experiments/<id>/report.py` is a thin wrapper over the shared
+`report_main` (`just eval-report <id>`), writing `eval/reports/<id>.html`; the
+baseline report generated from the committed `results.json` (commit `c11e60e`,
+run `2026-10-10T13-09-09Z`) is at `eval/reports/baseline.html`.
+
+The loader is version-aware on its own terms: `SUPPORTED_SCHEMA_VERSIONS` lists
+the versions the framework draws, an unknown (newer or older) `schema_version`
+raises `UnsupportedSchemaVersion` with the version and the known set, and the
+older v1 shape (no `k_values`, no `commit_ref`, absolute `environment.binary`)
+still renders because `swept_k_values`/`latency_k` derive what is missing.
+`eval/report/tests/` (34 offline tests, a committed `results.json` fixture per
+shape under `eval/report/tests/fixtures/`) covers version refusal, k/latency
+derivation, HTML escaping, self-containment, and SVG well-formedness; `just
+eval-test` now discovers the whole `eval/` tree (runner + report). P4 renders
+**retrieval (`results.json`) only** — ingestion is a separate artifact and its
+rendering is folded into P5.
+
 ### P5 — First experiment: drop small chunks
 
 **Hypothesis:** skipping embedding/insertion of chunks below a token threshold
@@ -385,6 +421,19 @@ reduces ingest cost (time, memory, tokens) with no material loss in recall@k.
 **Change:** a configurable/code-level minimum chunk-token threshold in ingest;
 `ingest --report` supplies the chunk-token distribution and cost deltas; the
 query-eval runner supplies recall/purity/latency deltas versus the baseline.
+
+**Report (carries P4's deferred ingestion rendering):** extend the P4 framework
+to compose an optional ingestion section from the run's `ingest-<profile>.json`.
+Add an independent, version-aware ingest loader (its own supported-version list,
+refusing unknown versions like `results.json`), run-directory discovery of both
+parts, and part selection, so ingest-only, retrieval-only, and combined
+documents all render. The ingestion section shows `status`, model, per-phase
+timing, peak RSS, tokenizer, totals, per-source counts, and the chunk-token
+distribution buckets (the drop-small-chunks input). It must lead with `status`
+and mark a `reused` report as "cost not measured" rather than showing zeros as
+free — a reused collection records no counts/tokens, so real cost requires a
+forced rebuild (`--force` or a new collection). Commit provenance comes from a
+sibling `results.json`, else from a commit the experiment script declares.
 
 ## Open questions / risks
 
@@ -417,11 +466,16 @@ query-eval runner supplies recall/purity/latency deltas versus the baseline.
   `target/release/rig-rag` (Cargo incremental), so an old checkout's binary
   cannot be measured silently; an explicit `--bin` is used verbatim and its
   `binary_sha256` recorded.
-- **Unanswerable question is not a clean negative.** At `THRESHOLD = 0.5` the
-  `unanswerable-license` question returns hits at every k (`no_hit_rate = 0.0`).
-  Resolve (raise the threshold, or move the negative further from the corpus)
-  before freezing the baseline, since P5's "no material loss" is measured
-  against it.
+- **Unanswerable question (resolved before the freeze).** The original
+  `unanswerable-license` question was not a clean negative — its topic is
+  semantically adjacent to the corpus, so at `THRESHOLD = 0.5` it returned hits
+  at every k (`no_hit_rate = 0.0`; top hit 0.633). Resolved by **moving the
+  negative further from the corpus**, not by changing the threshold: the new
+  `unanswerable-geography` ("What is the tallest mountain in South America?")
+  has a best-scoring chunk of **0.455 < 0.5**, so it returns no hit at any k
+  with production unchanged. Caveat for later: dense scores are poorly
+  calibrated here — most off-topic questions clear 0.5 (only 2 of 20 probed did
+  not), so `THRESHOLD = 0.5` is a weak relevance cutoff in general.
 
 ## Deferred (future passes)
 

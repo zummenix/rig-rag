@@ -9,8 +9,12 @@ eval/
   questions.toml          # versioned question set (gold evidence per question)
   profiles/<name>/        # a profile = rig-rag.toml + sources.json
   runner/                 # Python orchestration, metrics, results contract
+  report/framework/       # self-contained HTML reporting (loader, SVG, layout)
+  report/tests/           # report compatibility/render tests + fixtures
+  experiments/<id>/report.py    # thin per-experiment render script
   tests/                  # offline unit tests (stdlib unittest)
   results/<experiment>/<run>/   # results.json, hits.jsonl, ingest/serve logs
+  reports/<experiment>.html     # generated HTML (gitignored; regenerate on demand)
 ```
 
 ## Requirements
@@ -105,6 +109,38 @@ it holds `degradation` (single → multi deltas over the shared questions) and
 `summary` (per-profile aggregates, including the unanswerable no-hit rate),
 both labelled at the run's `--latency-k`.
 
+## Reporting
+
+`eval/report/framework/` renders a committed `results.json` into one
+self-contained HTML document (inline CSS + inline SVG, no scripts, fonts, or
+network references). `render_report` takes a loaded results document and
+returns the HTML; the per-experiment scripts are thin wrappers:
+
+```sh
+python3 -m eval.experiments.baseline.report        # newest baseline run
+just eval-report baseline                          # same, via Just
+python3 -m eval.experiments.baseline.report --results eval/results/baseline/<run>/results.json
+```
+
+Output lands at `eval/reports/<experiment>.html` (generated and **gitignored** —
+regenerate it any time from the committed input with `just eval-report
+<experiment>`). The report covers provenance
+(commit + pushed ref + environment), a per-profile summary, mean recall@k and a
+per-question breakdown, latency, cross-corpus degradation deltas, and the exact
+measured configuration.
+
+`results.json` is a **versioned contract**, so the framework keeps its own list
+of supported schema versions (`eval/report/framework/loader.py`) and refuses an
+unknown one with a clear message rather than guessing. An older v1 file that
+predates `k_values`/`commit_ref` still renders: the loader derives the swept k
+set and latency k. `eval/report/tests/fixtures/` holds a committed results
+fixture per shape, and `eval/report/tests/` asserts both render and that a
+future version fails loudly.
+
+Ingestion data (`ingest-<profile>.json`) is a **separate artifact** and is not
+part of this report yet: composing it into an optional ingestion section is
+planned for **P5** (see `docs/eval-plan.md`).
+
 ## Metrics
 
 Fixed definitions (unit-tested in `eval/tests/test_metrics.py`):
@@ -126,8 +162,9 @@ once per (question, k).
 ## Tests
 
 ```sh
-python3 -m unittest discover -s eval/tests -t .    # from the repo root
+python3 -m unittest discover -s eval -t .    # from the repo root (runner + report)
 # or: just eval-test
 ```
 
-The suite is fully offline (a stub HTTP server stands in for `serve`).
+The suite is fully offline (a stub HTTP server stands in for `serve`; the report
+fixtures are committed JSON).
