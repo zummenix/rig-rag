@@ -1,0 +1,63 @@
+{
+  "schema_version": 1,
+  "status": "reused",
+  "profile": "single-project",
+  "config": "eval/profiles/single-project/rig-rag.toml",
+  "sources": "eval/profiles/single-project/sources.json",
+  "collection": "eval-single-project-bge-small-en-v1-5-f017d3d86bc1",
+  "prefix": "eval-single-project",
+  "force": false,
+  "model": {
+    "slug": "bge-small-en-v1.5",
+    "dimensions": 384
+  },
+  "timing_ms": {
+    "fetch": 3301,
+    "load": 0,
+    "chunk": 0,
+    "embed": 0,
+    "insert": 0,
+    "total": 3407
+  },
+  "memory": {
+    "peak_rss_bytes": 359972864,
+    "cgroup_peak_bytes": null
+  },
+  "tokenizer": "tiktoken:cl100k_base",
+  "sources_detail": [
+    {
+      "name": "jj",
+      "url": "https://github.com/jj-vcs/jj",
+      "ref": "9a1ad09b16e87d5d5e25759e5027953f8257be98",
+      "resolved_commit": "9a1ad09b16e87d5d5e25759e5027953f8257be98",
+      "documents": 0,
+      "chunks": 0,
+      "tokens": 0,
+      "chunk_tokens": {
+        "min": 0,
+        "max": 0,
+        "mean": 0.0,
+        "p50": 0,
+        "p90": 0,
+        "buckets": {
+          "<50": 0,
+          "50-99": 0,
+          "100-199": 0,
+          "200-399": 0,
+          ">=400": 0
+        }
+      }
+    }
+  ],
+  "totals": {
+    "documents": 0,
+    "chunks": 0,
+    "tokens": 0,
+    "embeddings": 0
+  },
+  "environment": {
+    "os": "macos",
+    "arch": "aarch64",
+    "qdrant_url": "http://localhost:6334"
+  }
+}

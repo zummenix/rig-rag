@@ -24,13 +24,18 @@ check:
 test-site:
     cd site/tests && npm install && npx playwright test
 
-# Run the offline Python eval-runner unit tests (stdlib unittest).
+# Run the offline Python eval unit tests (stdlib unittest), runner + report.
 eval-test:
-    python3 -m unittest discover -s eval/tests -t .
+    python3 -m unittest discover -s eval -t .
 
 # Run the retrieval-eval runner; pass flags after `--`, e.g. `just eval-run --profiles single-project`.
 eval-run *args:
     python3 -m eval.runner {{args}}
 
-# Everything: Rust workspace checks, the UI e2e suite, and the eval-runner tests.
+# Render an experiment's newest run to eval/reports/<experiment>.html.
+# e.g. `just eval-report baseline`.
+eval-report experiment:
+    python3 -m eval.experiments.{{experiment}}.report
+
+# Everything: Rust workspace checks, the UI e2e suite, and the eval tests.
 check-all: check test-site eval-test

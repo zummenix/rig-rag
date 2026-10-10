@@ -1,0 +1,363 @@
+{
+  "schema_version": 1,
+  "experiment": "baseline",
+  "run": "2026-10-10T12-00-00Z",
+  "started_at": "2026-10-10T12:00:00Z",
+  "commit": "f57809d1c2b3a4d5e6f708192a3b4c5d6e7f8091",
+  "config": {
+    "single-project": {
+      "rig-rag.toml": {
+        "qdrant": {
+          "url": "http://localhost:6334"
+        },
+        "embedding": {
+          "model": "bge-small-en-v1.5"
+        },
+        "corpus": {
+          "prefix": "eval-single-project",
+          "data_root": "data/single-project"
+        },
+        "collection": {
+          "active": "eval-single-project-bge-small-en-v1-5-f017d3d86bc1"
+        }
+      },
+      "sources.json": [
+        {
+          "name": "jj",
+          "url": "https://github.com/jj-vcs/jj",
+          "ref": "9a1ad09b16e87d5d5e25759e5027953f8257be98"
+        }
+      ]
+    },
+    "multi-project": {
+      "rig-rag.toml": {
+        "qdrant": {
+          "url": "http://localhost:6334"
+        },
+        "embedding": {
+          "model": "bge-small-en-v1.5"
+        },
+        "corpus": {
+          "prefix": "eval-multi-project",
+          "data_root": "data/multi-project"
+        },
+        "collection": {
+          "active": "eval-multi-project-bge-small-en-v1-5-a3ea89d89f3c"
+        }
+      },
+      "sources.json": [
+        {
+          "name": "jj",
+          "url": "https://github.com/jj-vcs/jj",
+          "ref": "9a1ad09b16e87d5d5e25759e5027953f8257be98"
+        },
+        {
+          "name": "podman",
+          "url": "https://github.com/containers/podman",
+          "ref": "e3ed4e39137fbe457dbf09c4a9d66d6e1f31e365"
+        },
+        {
+          "name": "qdrant",
+          "url": "https://github.com/qdrant/qdrant",
+          "ref": "9855e50fc739de44a223a1c50faced806a868b6a"
+        }
+      ]
+    }
+  },
+  "environment": {
+    "os": "darwin",
+    "arch": "arm64",
+    "python": "3.11.9",
+    "binary": "/Users/dev/projects/rig-rag/target/release/rig-rag",
+    "binary_sha256": "0f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c4b5a69788796a5b4c3d2e1f0",
+    "qdrant_url": "http://localhost:6334"
+  },
+  "profiles": {
+    "single-project": {
+      "collection": "eval-single-project-bge-small-en-v1-5-f017d3d86bc1",
+      "prefix": "eval-single-project",
+      "data_root": "data/single-project",
+      "source_names": [
+        "jj"
+      ],
+      "latency": {
+        "warmup": 3,
+        "reps": 5,
+        "latency_k": 7,
+        "samples_ms": [
+          8.1,
+          8.4,
+          8.9,
+          9.2,
+          10.1
+        ],
+        "p50_ms": 8.9,
+        "p95_ms": 10.1
+      },
+      "questions": [
+        {
+          "id": "jj-new-change",
+          "question": "How do I create a new change in jj?",
+          "answerable": true,
+          "gold": [
+            {
+              "source": "jj",
+              "path": "cli-reference.md",
+              "must_contain": "jj new"
+            }
+          ],
+          "notes": "How-to.",
+          "by_k": {
+            "1": {
+              "answerable": true,
+              "hits_returned": 1,
+              "no_hit": null,
+              "hit": 1,
+              "recall": 1.0,
+              "precision": 1.0,
+              "mrr": 1.0,
+              "purity": 1.0,
+              "hits": [
+                "cli-reference.md:10-12"
+              ]
+            },
+            "7": {
+              "answerable": true,
+              "hits_returned": 7,
+              "no_hit": null,
+              "hit": 1,
+              "recall": 1.0,
+              "precision": 0.5,
+              "mrr": 1.0,
+              "purity": 1.0,
+              "hits": [
+                "cli-reference.md:10-12",
+                "cli-reference.md:20-24"
+              ]
+            }
+          },
+          "latency_ms": [
+            8.1,
+            8.4,
+            8.9,
+            9.2,
+            10.1
+          ]
+        },
+        {
+          "id": "jj-author",
+          "question": "Who is the author of jj?",
+          "answerable": true,
+          "gold": [
+            {
+              "source": "jj",
+              "path": "testimonials.md",
+              "must_contain": "project creator and leader"
+            }
+          ],
+          "notes": "Paraphrase gap.",
+          "by_k": {
+            "1": {
+              "answerable": true,
+              "hits_returned": 1,
+              "no_hit": null,
+              "hit": 0,
+              "recall": 0.0,
+              "precision": 0.0,
+              "mrr": 0.0,
+              "purity": 1.0,
+              "hits": [
+                "config.md:5-8"
+              ]
+            },
+            "7": {
+              "answerable": true,
+              "hits_returned": 7,
+              "no_hit": null,
+              "hit": 0,
+              "recall": 0.0,
+              "precision": 0.0,
+              "mrr": 0.0,
+              "purity": 1.0,
+              "hits": [
+                "config.md:5-8"
+              ]
+            }
+          },
+          "latency_ms": [
+            8.1,
+            8.4,
+            8.9,
+            9.2,
+            10.1
+          ]
+        }
+      ]
+    },
+    "multi-project": {
+      "collection": "eval-multi-project-bge-small-en-v1-5-a3ea89d89f3c",
+      "prefix": "eval-multi-project",
+      "data_root": "data/multi-project",
+      "source_names": [
+        "jj",
+        "podman",
+        "qdrant"
+      ],
+      "latency": {
+        "warmup": 3,
+        "reps": 5,
+        "latency_k": 7,
+        "samples_ms": [
+          9.4,
+          9.6,
+          10.0,
+          10.8,
+          11.3
+        ],
+        "p50_ms": 10.0,
+        "p95_ms": 11.3
+      },
+      "questions": [
+        {
+          "id": "jj-new-change",
+          "question": "How do I create a new change in jj?",
+          "answerable": true,
+          "gold": [
+            {
+              "source": "jj",
+              "path": "cli-reference.md",
+              "must_contain": "jj new"
+            }
+          ],
+          "notes": "How-to; cross-corpus competition.",
+          "by_k": {
+            "1": {
+              "answerable": true,
+              "hits_returned": 1,
+              "no_hit": null,
+              "hit": 0,
+              "recall": 0.0,
+              "precision": 0.0,
+              "mrr": 0.0,
+              "purity": 0.0,
+              "hits": [
+                "config.md:5-8"
+              ]
+            },
+            "7": {
+              "answerable": true,
+              "hits_returned": 7,
+              "no_hit": null,
+              "hit": 0,
+              "recall": 0.0,
+              "precision": 0.0,
+              "mrr": 0.0,
+              "purity": 0.5,
+              "hits": [
+                "config.md:5-8",
+                "podman-run.md:3"
+              ]
+            }
+          },
+          "latency_ms": [
+            9.4,
+            9.6,
+            10.0,
+            10.8,
+            11.3
+          ]
+        },
+        {
+          "id": "unanswerable-license",
+          "question": "Which license did the maintainers choose, and why?",
+          "answerable": false,
+          "gold": [],
+          "notes": "Expected: no hit above threshold.",
+          "by_k": {
+            "1": {
+              "answerable": false,
+              "hits_returned": 1,
+              "no_hit": 0,
+              "hit": null,
+              "recall": null,
+              "precision": null,
+              "mrr": null,
+              "purity": null,
+              "hits": [
+                "config.md:1-2"
+              ]
+            },
+            "7": {
+              "answerable": false,
+              "hits_returned": 2,
+              "no_hit": 0,
+              "hit": null,
+              "recall": null,
+              "precision": null,
+              "mrr": null,
+              "purity": null,
+              "hits": [
+                "config.md:1-2",
+                "patch.md:5"
+              ]
+            }
+          },
+          "latency_ms": [
+            9.4,
+            9.6,
+            10.0,
+            10.8,
+            11.3
+          ]
+        }
+      ]
+    }
+  },
+  "degradation": {
+    "single-project->multi-project": {
+      "from": "single-project",
+      "to": "multi-project",
+      "questions_compared": [
+        "jj-new-change"
+      ],
+      "recall@1": -1.0,
+      "recall@7": -1.0,
+      "purity@7": -0.5,
+      "p95_ms": 1.2
+    }
+  },
+  "summary": {
+    "single-project": {
+      "questions_applied": 2,
+      "answerable": 2,
+      "unanswerable": 0,
+      "mean_recall": {
+        "recall@1": 0.5,
+        "recall@7": 0.5
+      },
+      "mean_purity@7": 1.0,
+      "mean_mrr@7": 0.5,
+      "unanswerable_no_hit_rate": null,
+      "latency": {
+        "p50_ms": 8.9,
+        "p95_ms": 10.1
+      }
+    },
+    "multi-project": {
+      "questions_applied": 2,
+      "answerable": 1,
+      "unanswerable": 1,
+      "mean_recall": {
+        "recall@1": 0.0,
+        "recall@7": 0.0
+      },
+      "mean_purity@7": 0.5,
+      "mean_mrr@7": 0.0,
+      "unanswerable_no_hit_rate": 0.0,
+      "latency": {
+        "p50_ms": 10.0,
+        "p95_ms": 11.3
+      }
+    }
+  }
+}

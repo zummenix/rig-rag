@@ -1,0 +1,109 @@
+{
+  "schema_version": 1,
+  "status": "reused",
+  "profile": "multi-project",
+  "config": "eval/profiles/multi-project/rig-rag.toml",
+  "sources": "eval/profiles/multi-project/sources.json",
+  "collection": "eval-multi-project-bge-small-en-v1-5-a3ea89d89f3c",
+  "prefix": "eval-multi-project",
+  "force": false,
+  "model": {
+    "slug": "bge-small-en-v1.5",
+    "dimensions": 384
+  },
+  "timing_ms": {
+    "fetch": 16104,
+    "load": 0,
+    "chunk": 0,
+    "embed": 0,
+    "insert": 0,
+    "total": 16587
+  },
+  "memory": {
+    "peak_rss_bytes": 360038400,
+    "cgroup_peak_bytes": null
+  },
+  "tokenizer": "tiktoken:cl100k_base",
+  "sources_detail": [
+    {
+      "name": "jj",
+      "url": "https://github.com/jj-vcs/jj",
+      "ref": "9a1ad09b16e87d5d5e25759e5027953f8257be98",
+      "resolved_commit": "9a1ad09b16e87d5d5e25759e5027953f8257be98",
+      "documents": 0,
+      "chunks": 0,
+      "tokens": 0,
+      "chunk_tokens": {
+        "min": 0,
+        "max": 0,
+        "mean": 0.0,
+        "p50": 0,
+        "p90": 0,
+        "buckets": {
+          "<50": 0,
+          "50-99": 0,
+          "100-199": 0,
+          "200-399": 0,
+          ">=400": 0
+        }
+      }
+    },
+    {
+      "name": "podman",
+      "url": "https://github.com/podman-container-tools/podman",
+      "ref": "e3ed4e39137fbe457dbf09c4a9d66d6e1f31e365",
+      "resolved_commit": "e3ed4e39137fbe457dbf09c4a9d66d6e1f31e365",
+      "documents": 0,
+      "chunks": 0,
+      "tokens": 0,
+      "chunk_tokens": {
+        "min": 0,
+        "max": 0,
+        "mean": 0.0,
+        "p50": 0,
+        "p90": 0,
+        "buckets": {
+          "<50": 0,
+          "50-99": 0,
+          "100-199": 0,
+          "200-399": 0,
+          ">=400": 0
+        }
+      }
+    },
+    {
+      "name": "qdrant",
+      "url": "https://github.com/qdrant/landing_page",
+      "ref": "9855e50fc739de44a223a1c50faced806a868b6a",
+      "resolved_commit": "9855e50fc739de44a223a1c50faced806a868b6a",
+      "documents": 0,
+      "chunks": 0,
+      "tokens": 0,
+      "chunk_tokens": {
+        "min": 0,
+        "max": 0,
+        "mean": 0.0,
+        "p50": 0,
+        "p90": 0,
+        "buckets": {
+          "<50": 0,
+          "50-99": 0,
+          "100-199": 0,
+          "200-399": 0,
+          ">=400": 0
+        }
+      }
+    }
+  ],
+  "totals": {
+    "documents": 0,
+    "chunks": 0,
+    "tokens": 0,
+    "embeddings": 0
+  },
+  "environment": {
+    "os": "macos",
+    "arch": "aarch64",
+    "qdrant_url": "http://localhost:6334"
+  }
+}
