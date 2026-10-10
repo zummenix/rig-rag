@@ -66,7 +66,7 @@ def _parse_gold(raw: dict) -> Gold:
 def parse_questions(raw: str) -> list[Question]:
     document = tomllib.loads(raw)
     entries = document.get("question")
-    if not isinstance(entries, list):
+    if not isinstance(entries, list) or not entries:
         raise ValueError("questions file must contain a non-empty [[question]] array")
     questions: list[Question] = []
     for entry in entries:

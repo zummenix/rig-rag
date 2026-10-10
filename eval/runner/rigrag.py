@@ -6,9 +6,12 @@ reimplementation) exactly as a user would from the command line.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import subprocess
 from pathlib import Path
+
+from eval.runner.paths import repo_relative
 
 
 class RigRagError(RuntimeError):
@@ -24,6 +27,16 @@ class RigRag:
 
     def _command(self, *args: str) -> list[str]:
         return [str(self.binary), *args]
+
+    def _cli_path(self, path: Path) -> str:
+        """A path argument, relative to `self.cwd` when it is under it.
+
+        The binary records `--config`/`--sources` verbatim in its ingest report;
+        passing repo-relative paths keeps that committed artifact portable even
+        though the runner works with absolute paths internally.
+        """
+
+        return str(repo_relative(path, self.cwd))
 
     def _run(self, *args: str) -> None:
         result = subprocess.run(self._command(*args), cwd=self.cwd, check=False)
@@ -44,12 +57,12 @@ class RigRag:
 
         args = [
             "--config",
-            str(config),
+            self._cli_path(config),
             "--sources",
-            str(sources),
+            self._cli_path(sources),
             "ingest",
             "--report",
-            str(report),
+            self._cli_path(report),
         ]
         if force:
             args.append("--force")
@@ -57,32 +70,34 @@ class RigRag:
         return json.loads(report.read_text(encoding="utf-8"))
 
     def promote(self, config: Path, collection: str) -> None:
-        self._run("--config", str(config), "promote", collection)
+        self._run("--config", self._cli_path(config), "promote", collection)
 
     def serve_command(self, config: Path, bind: str, site_dir: Path) -> list[str]:
         return self._command(
             "--config",
-            str(config),
+            self._cli_path(config),
             "serve",
             "--bind",
             bind,
             "--site-dir",
-            str(site_dir),
+            self._cli_path(site_dir),
         )
 
     def model(self, config: Path) -> str:
-        result = self._run_capture("--config", str(config), "model")
+        result = self._run_capture("--config", self._cli_path(config), "model")
         if result.returncode != 0:
             raise RigRagError(f"rig-rag model failed: {result.stderr.strip()}")
         return result.stdout.strip()
 
 
-def resolve_binary(repo_root: Path, override: str | None = None, build: bool = True) -> Path:
-    """Finds the `rig-rag` binary, preferring the most recently built one.
+def resolve_binary(repo_root: Path, override: str | None = None) -> Path:
+    """Returns the `rig-rag` binary to evaluate.
 
-    An out-of-date `target/release/rig-rag` can silently lack newer flags (for
-    example `ingest --report`), so the newest of `target/{release,debug}` wins
-    rather than a fixed profile order. An explicit `--bin` always overrides.
+    An explicit `--bin` is used verbatim: it is the caller's responsibility that
+    it matches the sources under test, and its hash is recorded in the results.
+    With no override the binary is **built now** with `cargo build --release`, so
+    a stale `target/` cannot be measured silently; Cargo's incremental build
+    makes this cheap when nothing changed.
     """
 
     if override:
@@ -92,21 +107,19 @@ def resolve_binary(repo_root: Path, override: str | None = None, build: bool = T
         return binary.resolve()
 
     repo_root = Path(repo_root)
-    candidates = [
-        candidate
-        for candidate in (
-            repo_root / "target" / "release" / "rig-rag",
-            repo_root / "target" / "debug" / "rig-rag",
-        )
-        if candidate.is_file()
-    ]
-    if candidates:
-        return max(candidates, key=lambda path: path.stat().st_mtime).resolve()
-    if not build:
-        raise FileNotFoundError(
-            "no built rig-rag binary found under target/{release,debug}; run `cargo build`"
-        )
     subprocess.run(
-        ["cargo", "build", "--bin", "rig-rag"], cwd=repo_root, check=True
+        ["cargo", "build", "--release", "--bin", "rig-rag"],
+        cwd=repo_root,
+        check=True,
     )
-    return (repo_root / "target" / "debug" / "rig-rag").resolve()
+    return (repo_root / "target" / "release" / "rig-rag").resolve()
+
+
+def binary_sha256(binary: Path) -> str:
+    """Content hash of the evaluated binary, for portable provenance."""
+
+    digest = hashlib.sha256()
+    with Path(binary).open("rb") as handle:
+        for block in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()

@@ -59,7 +59,18 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--bin",
         default=None,
-        help="path to the rig-rag binary (default: target/{release,debug}/rig-rag)",
+        help=(
+            "path to the rig-rag binary "
+            "(default: build `target/release/rig-rag` with cargo)"
+        ),
+    )
+    parser.add_argument(
+        "--allow-dirty",
+        action="store_true",
+        help=(
+            "measure a work tree with uncommitted tracked changes; the recorded "
+            "commit then does not capture what was measured"
+        ),
     )
     parser.add_argument(
         "--k",
@@ -128,6 +139,7 @@ def main(argv: list[str] | None = None) -> int:
         profiles=selected,
         skip_ingest=args.skip_ingest,
         force_ingest=args.force_ingest,
+        allow_dirty=args.allow_dirty,
         binary=args.bin,
         k_values=k_values,
         warmup=args.warmup,

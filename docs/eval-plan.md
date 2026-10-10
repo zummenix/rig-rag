@@ -45,7 +45,7 @@ and reported as self-contained HTML.
 | Reports | Shared framework + **one thin `report.py` per experiment** → self-contained HTML. Results JSON is a **versioned, unit-tested contract** so old experiments stay renderable. |
 | Report design | Neutral technical-report style built from scratch; inline SVG charts; no external assets. |
 | Commit identity | Record the **git commit SHA** (not a jj change-id) — portable for git-only users; jj users get the same SHA. |
-| Commit reachability | The measured commit stays in history (only code is reverted, in a new commit); reports persist. |
+| Commit reachability | The runner refuses uncommitted tracked changes and requires `HEAD` to be contained by a pushed remote ref; `results.json` records `commit_ref`. No tags/bookmarks (easy to forget to push). Reports persist. |
 
 ## Corpus profiles
 
@@ -199,8 +199,9 @@ Candidate `results.json` shape (subject to P3 refinement):
   "experiment": "<id>",
   "run": "2026-10-10T12:00:00Z",
   "commit": "<git commit SHA>",
+  "commit_ref": "origin/main",       // pushed remote ref containing `commit`
   "config": { /* profile sources + config snapshots */ },
-  "environment": { /* os, arch, rust commit, qdrant url, python deps */ },
+  "environment": { /* os, arch, python, binary (repo-relative), binary_sha256, qdrant url */ },
   "profiles": {
     "single-project": {
       "collection": "...",
@@ -399,21 +400,23 @@ query-eval runner supplies recall/purity/latency deltas versus the baseline.
   warmups/reps consistent; consider containerized runs for comparability later.
 - **Result size.** `hits.jsonl` + `results.json` per run can grow; keep raw dumps
   per-run and committed summary small (or gitignore raw dumps if needed).
-- **Artifact path portability — TODO before freezing a baseline.** The runner
-  records absolute host paths in committed artifacts: `results.json` →
-  `environment.binary` and each `ingest-*.json` → `config`/`sources` are
-  `/Users/<user>/…`. Record repo-relative paths instead (the runner already runs
-  with `cwd=repo_root`, so pass relative `--config`/`--sources` and store a
-  relative binary path), then re-run. Not yet implemented.
-- **Measured-commit reachability under jj — TODO before freezing a baseline.**
-  The plan requires the measured commit to stay in history, but in this
-  jj-colocated repo `git rev-parse HEAD` at run time can capture a transient jj
-  export that a later jj operation abandons. The multi-project baseline recorded
-  `f57809d`, which is reflog-only and **not** an ancestor of `HEAD` — i.e.
-  unreproducible from a clean clone. Have the runner verify (or make) the
-  measured commit reachable — e.g. tag/bookmark it at run time, or run from a
-  stable git commit that won't be rewritten. The abandoned
-  `eval/results/baseline/*` candidates should be dropped rather than committed.
+- **Artifact path portability.** Resolved: the runner passes `--config`/
+  `--sources` (and the report/site paths) relative to the repo root
+  (`eval/runner/paths.py`), so `ingest-*.json` → `config`/`sources` are
+  repo-relative; `results.json` → `environment.binary` is repo-relative too
+  (absolute only for an external `--bin`) and is paired with `binary_sha256`.
+- **Measured-commit reachability under jj.** Resolved: the runner refuses a tree
+  with uncommitted tracked changes (untracked outputs like `eval/results/**` are
+  ignored; `--allow-dirty` escapes ad-hoc runs) and refuses unless `HEAD` is
+  contained by a pushed remote ref (`refs/remotes/*`), relying on the normal push
+  flow rather than tags/bookmarks that are easy to forget. The containing ref is
+  recorded as `results.json` → `commit_ref`. The abandoned
+  `eval/results/baseline/*` candidates (`f57809d`) are dropped rather than
+  committed.
+- **Stale-binary drift.** Resolved: with no `--bin` the runner always rebuilds
+  `target/release/rig-rag` (Cargo incremental), so an old checkout's binary
+  cannot be measured silently; an explicit `--bin` is used verbatim and its
+  `binary_sha256` recorded.
 - **Unanswerable question is not a clean negative.** At `THRESHOLD = 0.5` the
   `unanswerable-license` question returns hits at every k (`no_hit_rate = 0.0`).
   Resolve (raise the threshold, or move the negative further from the corpus)

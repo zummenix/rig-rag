@@ -1,9 +1,11 @@
+import hashlib
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from eval.runner.profiles import parse_profile
-from eval.runner.rigrag import RigRag, resolve_binary
+from eval.runner.rigrag import RigRag, binary_sha256, resolve_binary
 
 
 class ResolveBinaryTest(unittest.TestCase):
@@ -15,6 +17,33 @@ class ResolveBinaryTest(unittest.TestCase):
             binary = Path(tmp) / "rig-rag"
             binary.write_text("#!/bin/sh\n")
             self.assertEqual(resolve_binary(Path(tmp), override=str(binary)), binary.resolve())
+
+    def test_builds_release_when_no_override(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            calls = []
+
+            def fake_run(command, cwd=None, check=None):
+                calls.append(command)
+                target = Path(cwd) / "target" / "release" / "rig-rag"
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text("#!/bin/sh\n")
+
+            with mock.patch("eval.runner.rigrag.subprocess.run", side_effect=fake_run):
+                binary = resolve_binary(root)
+
+            self.assertEqual(calls, [["cargo", "build", "--release", "--bin", "rig-rag"]])
+            self.assertEqual(binary, (root / "target" / "release" / "rig-rag").resolve())
+
+
+class BinarySha256Test(unittest.TestCase):
+    def test_matches_hashlib(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            binary = Path(tmp) / "rig-rag"
+            binary.write_bytes(b"payload")
+            self.assertEqual(
+                binary_sha256(binary), hashlib.sha256(b"payload").hexdigest()
+            )
 
 
 class RigRagCommandTest(unittest.TestCase):
@@ -31,6 +60,28 @@ class RigRagCommandTest(unittest.TestCase):
                 "127.0.0.1:9",
                 "--site-dir",
                 "no-site",
+            ],
+        )
+
+    def test_cli_path_relativizes_paths_under_cwd(self):
+        rig = RigRag(Path("/bin/rig-rag"), Path("/repo"))
+        self.assertEqual(rig._cli_path(Path("/repo/eval/x.toml")), "eval/x.toml")
+        self.assertEqual(rig._cli_path(Path("/elsewhere/x.toml")), "/elsewhere/x.toml")
+        self.assertEqual(rig._cli_path(Path("x.toml")), "x.toml")
+
+    def test_serve_command_relativizes_absolute_config(self):
+        rig = RigRag(Path("/bin/rig-rag"), Path("/repo"))
+        self.assertEqual(
+            rig.serve_command(Path("/repo/cfg.toml"), "127.0.0.1:9", Path("/repo/site")),
+            [
+                "/bin/rig-rag",
+                "--config",
+                "cfg.toml",
+                "serve",
+                "--bind",
+                "127.0.0.1:9",
+                "--site-dir",
+                "site",
             ],
         )
 

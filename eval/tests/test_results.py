@@ -97,6 +97,7 @@ def build(keys, latency_k=7, single_ids=("a", "b"), multi_ids=("a", "b", "neg"),
         run="2026-10-10T12-00-00Z",
         started_at="2026-10-10T12:00:00Z",
         commit="deadbeef",
+        commit_ref="origin/main",
         config={"single-project": {"rig-rag.toml": {}, "sources.json": []}},
         environment={"os": "darwin"},
         profiles=profiles,
@@ -116,6 +117,7 @@ class BuildResultsTest(unittest.TestCase):
             "run",
             "started_at",
             "commit",
+            "commit_ref",
             "config",
             "environment",
             "k_values",
@@ -125,6 +127,7 @@ class BuildResultsTest(unittest.TestCase):
         ):
             self.assertIn(key, self.results)
         self.assertEqual(self.results["k_values"], list(K_VALUES))
+        self.assertEqual(self.results["commit_ref"], "origin/main")
 
     def test_degradation_covers_shared_answerable_questions(self):
         entry = self.results["degradation"]["single-project->multi-project"]

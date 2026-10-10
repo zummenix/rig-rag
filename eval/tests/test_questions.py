@@ -56,6 +56,13 @@ class ParseQuestionsTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             parse_questions(question_toml(gold='[{ source = "jj", path = "a.md", lines = [1] }]'))
 
+    def test_rejects_empty_question_array(self):
+        # A missing key and an explicitly empty array are both rejected, so the
+        # runner can never report a "successful" run with no questions.
+        for raw in ("question = []\n", ""):
+            with self.assertRaisesRegex(ValueError, "non-empty"):
+                parse_questions(raw)
+
 
 class ValidateQuestionsTest(unittest.TestCase):
     def test_accepts_the_seed_shape(self):

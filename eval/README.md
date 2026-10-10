@@ -19,6 +19,10 @@ eval/
   no third-party packages.
 - A running Qdrant reachable at the profile's `[qdrant].url`.
 - `git` on `PATH` (profiles pin corpus sources to commit SHAs).
+- A clean work tree whose `HEAD` is contained by a pushed remote ref: the runner
+  refuses uncommitted tracked changes and unpushed commits so the recorded
+  `commit` stays reproducible. `--allow-dirty` skips the clean-tree check for
+  ad-hoc runs.
 - `OPENROUTER_API_KEY` and `OPENROUTER_MODEL_NAME` in the environment: `serve`
   boots the chat agent at startup even though `/api/query` needs no LLM, so the
   retrieval harness currently inherits that requirement.
@@ -70,8 +74,9 @@ python3 -m eval.runner --experiment latency --profiles single-project --skip-ing
 python3 -m eval.runner --experiment baseline
 ```
 
-Useful flags: `--bin <path>` (default: newest of `target/{release,debug}/rig-rag`),
-`--k` (a comma-separated subset of the contract grid `1,3,5,7,10,20`; default all),
+Useful flags: `--bin <path>` (default: `cargo build --release`, then
+`target/release/rig-rag`), `--allow-dirty` (skip the clean-tree check), `--k` (a
+comma-separated subset of the contract grid `1,3,5,7,10,20`; default all),
 `--warmup`, `--reps`, `--latency-k` (must be one of `--k`), `--port`,
 `--startup-timeout`, `--repo-root`. Run `python3 -m eval.runner --help`.
 
@@ -84,7 +89,9 @@ applicable question → teardown.
 Per run under `eval/results/<experiment>/<run>/`:
 
 - `results.json` — the versioned render input (schema in
-  `eval/runner/results.py`). Committed as an artifact.
+  `eval/runner/results.py`). Committed as an artifact. It records the measured
+  `commit` and the pushed `commit_ref` containing it, plus an `environment` block
+  whose `binary` is repo-relative with its `binary_sha256`.
 - `hits.jsonl` — one JSON object per returned hit (profile, question, k, rank,
   score, source, path, lines, chunk text) for offline analysis.
 - `ingest-<profile>.json` — the Rust `ingest --report` document.

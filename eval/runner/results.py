@@ -14,8 +14,9 @@ Layout (v1):
   "run": "2026-10-10T12-00-00Z",     // also the run directory name
   "started_at": "2026-10-10T12:00:00Z",
   "commit": "<git commit SHA>",
+  "commit_ref": "origin/main",       // pushed remote ref containing `commit`
   "config": { "<profile>": { "rig-rag.toml": {...}, "sources.json": [...] } },
-  "environment": { "os", "arch", "python", "binary", "qdrant_url" },
+  "environment": { "os", "arch", "python", "binary", "binary_sha256", "qdrant_url" },
   "k_values": [1, 3, 5, 7, 10, 20],   // the swept k set (default = contract grid)
   "profiles": {
     "<profile>": {
@@ -105,6 +106,7 @@ def build_results(
     run: str,
     started_at: str,
     commit: str,
+    commit_ref: str,
     config: dict,
     environment: dict,
     profiles: dict,
@@ -118,6 +120,7 @@ def build_results(
         "run": run,
         "started_at": started_at,
         "commit": commit,
+        "commit_ref": commit_ref,
         "config": config,
         "environment": environment,
         "k_values": list(values),
