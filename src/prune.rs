@@ -17,6 +17,13 @@ pub async fn run(yes: bool, config_path: impl AsRef<Path>) -> Result<()> {
     }
 
     let names = store::list_collection_names(&client).await?;
+    let ambiguous = ambiguous_collections(&names, &config.corpus.prefix, &config.embedding.model);
+    if !ambiguous.is_empty() {
+        bail!(
+            "corpus prefix {:?} is ambiguous with a more specific prefix for collections {ambiguous:?}; configure an unambiguous [corpus].prefix before pruning",
+            config.corpus.prefix
+        );
+    }
     let stale = stale_collections(&names, &active, &config.corpus.prefix);
 
     if stale.is_empty() {
@@ -36,6 +43,26 @@ pub async fn run(yes: bool, config_path: impl AsRef<Path>) -> Result<()> {
     }
     println!("Kept {active:?}");
     Ok(())
+}
+
+fn ambiguous_collections(names: &[String], prefix: &str, model: &str) -> Vec<String> {
+    let prefix = format!("{}-", hashing::sanitize(prefix));
+    let model = format!("-{}-", hashing::sanitize(model));
+    names
+        .iter()
+        .filter(|name| {
+            let Some(rest) = name.strip_prefix(&prefix) else {
+                return false;
+            };
+            let Some((_, hash)) = rest.rsplit_once('-') else {
+                return false;
+            };
+            hash.len() == 12
+                && hash.bytes().all(|byte| byte.is_ascii_hexdigit())
+                && rest.find(&model).is_some_and(|model_start| model_start > 0)
+        })
+        .cloned()
+        .collect()
 }
 
 /// Collections eligible for pruning: those sharing the config's `<prefix>-`
@@ -84,5 +111,18 @@ mod tests {
     fn keeps_the_active_collection() {
         let all = names(&["docs-a-111111111111"]);
         assert!(stale_collections(&all, "docs-a-111111111111", "docs").is_empty());
+    }
+
+    #[test]
+    fn detects_a_more_specific_prefix_using_the_configured_model() {
+        let all = names(&[
+            "eval-bge-small-en-v1-5-111111111111",
+            "eval-single-project-bge-small-en-v1-5-222222222222",
+            "eval-single-project-c-333333333333",
+        ]);
+        assert_eq!(
+            ambiguous_collections(&all, "eval", "bge-small-en-v1.5"),
+            names(&["eval-single-project-bge-small-en-v1-5-222222222222"])
+        );
     }
 }
