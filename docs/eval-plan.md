@@ -1,6 +1,6 @@
 # Evaluation harness plan
 
-Status: **design agreed, not yet implemented.** This document records the decisions
+Status: **P1 implemented; P2–P5 pending.** This document records the decisions
 taken for preparing `rig-rag` for experiments and evaluation. Work proceeds phase
 by phase (see [Phases](#phases)); Phase 1 is minimal Rust-only setup.
 
@@ -252,6 +252,23 @@ detached checkout + `--pin` + resolved-SHA output; prefix-scoped `prune`; the
 collection named `eval-<profile>-<model>-<hash>` under `data/<profile>/` and never
 touches `docs-*` or `data/`; `--pin` rewrites refs to SHAs; unit tests cover
 collection naming, prefix-scoped prune, and SHA checkout.
+
+**Done.** Code lands in `src/{main,config,sources,hashing,fetch,ingest,promote,prune,store,serve/mod,model}.rs`;
+profiles under `eval/profiles/`. `just check` (fmt + clippy `-D warnings` + tests)
+passes. Unit tests cover custom-prefix collection naming, `[corpus]` parsing,
+`Source::dir` roots, `write_refs`, prefix-scoped prune, `is_full_sha`, and an
+offline detached-SHA checkout (`fetch_git_checks_out_full_sha_detached`, local
+`file://` origin). Profile pins recorded 2026-10-10:
+
+| source | ref | commit |
+| --- | --- | --- |
+| jj | `main` | `9a1ad09b16e87d5d5e25759e5027953f8257be98` |
+| podman | `main` | `e3ed4e39137fbe457dbf09c4a9d66d6e1f31e365` |
+| qdrant | `master` | `9855e50fc739de44a223a1c50faced806a868b6a` |
+
+Known gap: the sparse (`--filter=blob:none --sparse`) + SHA path is implemented
+but only exercised offline by a non-sparse test; smoke-test a real profile
+ingest before P3 (see open risks).
 
 ### P2 — `ingest --report <path>`
 

@@ -39,11 +39,13 @@ pub const DEFAULT_KEEP_ALIVE: Duration = Duration::from_secs(15);
 pub struct ServeArgs {
     pub bind: Option<String>,
     pub site_dir: Option<PathBuf>,
+    /// Path of the runtime configuration to load.
+    pub config_path: PathBuf,
 }
 
 /// Loads config, connects the production impls (failing fast), and serves.
 pub async fn run(args: ServeArgs) -> Result<()> {
-    let config = Config::load()?;
+    let config = Config::load(&args.config_path)?;
     let server = config.server.as_ref();
 
     let bind = args

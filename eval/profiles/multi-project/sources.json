@@ -1,0 +1,23 @@
+[
+  {
+    "name": "jj",
+    "type": "git",
+    "url": "https://github.com/jj-vcs/jj",
+    "ref": "9a1ad09b16e87d5d5e25759e5027953f8257be98",
+    "path": "docs"
+  },
+  {
+    "name": "podman",
+    "type": "git",
+    "url": "https://github.com/podman-container-tools/podman",
+    "ref": "e3ed4e39137fbe457dbf09c4a9d66d6e1f31e365",
+    "path": "docs"
+  },
+  {
+    "name": "qdrant",
+    "type": "git",
+    "url": "https://github.com/qdrant/landing_page",
+    "ref": "9855e50fc739de44a223a1c50faced806a868b6a",
+    "path": "qdrant-landing/content/documentation"
+  }
+]
