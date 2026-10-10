@@ -72,21 +72,21 @@ pub async fn connect(config: &Config) -> Result<QdrantVectorStore> {
         );
     }
 
-    verify_model(active, &config.embedding.model)?;
+    verify_model(active, &config.embedding.model, &config.corpus.prefix)?;
     let model = embedding::load_slug(&config.embedding.model)?;
     Ok(new_store(client, model, active))
 }
 
 /// Checks a collection was built with `configured`, using the model slug baked
 /// into its name. Qdrant itself only rejects dimension mismatches.
-fn verify_model(collection: &str, configured: &str) -> Result<()> {
-    let prefix = format!(
+fn verify_model(collection: &str, configured: &str, prefix: &str) -> Result<()> {
+    let expected = format!(
         "{}-{}-",
-        hashing::COLLECTION_PREFIX,
+        hashing::sanitize(prefix),
         hashing::sanitize(configured)
     );
-    if !collection.starts_with(&prefix) {
-        let found = hashing::model_of(collection).unwrap_or("unknown");
+    if !collection.starts_with(&expected) {
+        let found = hashing::model_of(prefix, collection).unwrap_or("unknown");
         bail!(
             "active collection {collection:?} was built with model {found:?}, but config selects {configured:?}; re-ingest or fix [embedding].model"
         );

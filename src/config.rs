@@ -6,6 +6,12 @@ use serde::Deserialize;
 /// Path of the runtime configuration, relative to the working directory.
 pub const CONFIG_PATH: &str = "rig-rag.toml";
 
+/// Default collection-name prefix, and the production value.
+pub const DEFAULT_CORPUS_PREFIX: &str = "docs";
+
+/// Default directory fetched sources are checked out under.
+pub const DEFAULT_DATA_ROOT: &str = "data";
+
 /// Environment variable overriding `qdrant.url`, so containers can point the
 /// tool at a service name without editing the config.
 const QDRANT_URL_ENV: &str = "QDRANT_URL";
@@ -16,8 +22,42 @@ pub struct Config {
     pub qdrant: QdrantConfig,
     pub embedding: EmbeddingConfig,
     pub collection: CollectionConfig,
+    /// Corpus naming and layout. Absent entirely means production defaults
+    /// (prefix `docs`, data root `data`), so existing configs are unchanged.
+    #[serde(default)]
+    pub corpus: CorpusConfig,
     /// Defaults for the server; CLI flags override each field.
     pub server: Option<ServerConfig>,
+}
+
+/// Optional `[corpus]` section controlling collection prefixes and where
+/// fetched sources live. Both fields default to the production values.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CorpusConfig {
+    /// Prefix of every collection this config creates, e.g. `docs`.
+    #[serde(default = "default_prefix")]
+    pub prefix: String,
+    /// Directory fetched sources are checked out under, e.g. `data`.
+    #[serde(default = "default_data_root")]
+    pub data_root: std::path::PathBuf,
+}
+
+impl Default for CorpusConfig {
+    fn default() -> Self {
+        Self {
+            prefix: default_prefix(),
+            data_root: default_data_root(),
+        }
+    }
+}
+
+fn default_prefix() -> String {
+    DEFAULT_CORPUS_PREFIX.to_string()
+}
+
+fn default_data_root() -> std::path::PathBuf {
+    std::path::PathBuf::from(DEFAULT_DATA_ROOT)
 }
 
 #[derive(Debug, Deserialize)]
@@ -53,9 +93,9 @@ pub struct ServerConfig {
 }
 
 impl Config {
-    /// Loads [`CONFIG_PATH`], applying the [`QDRANT_URL_ENV`] override.
-    pub fn load() -> Result<Self> {
-        Self::from_path(CONFIG_PATH)
+    /// Loads the config at `path`, applying the [`QDRANT_URL_ENV`] override.
+    pub fn load(path: impl AsRef<Path>) -> Result<Self> {
+        Self::from_path(path)
     }
 
     pub fn from_path(path: impl AsRef<Path>) -> Result<Self> {
@@ -130,6 +170,32 @@ active = ""
     #[test]
     fn rejects_unknown_server_field() {
         let raw = format!("{SAMPLE}\n[server]\nbogus = 1\n");
+        assert!(Config::parse(&raw).is_err());
+    }
+
+    #[test]
+    fn corpus_defaults_when_absent() {
+        let config = Config::parse(SAMPLE).unwrap();
+        assert_eq!(config.corpus.prefix, "docs");
+        assert_eq!(config.corpus.data_root, Path::new("data"));
+    }
+
+    #[test]
+    fn parses_corpus_section_and_per_field_defaults() {
+        let raw = format!("{SAMPLE}\n[corpus]\nprefix = \"eval-x\"\n");
+        let config = Config::parse(&raw).unwrap();
+        assert_eq!(config.corpus.prefix, "eval-x");
+        assert_eq!(config.corpus.data_root, Path::new("data"));
+
+        let raw = format!("{SAMPLE}\n[corpus]\ndata_root = \"data/x\"\n");
+        let config = Config::parse(&raw).unwrap();
+        assert_eq!(config.corpus.prefix, "docs");
+        assert_eq!(config.corpus.data_root, Path::new("data/x"));
+    }
+
+    #[test]
+    fn rejects_unknown_corpus_field() {
+        let raw = format!("{SAMPLE}\n[corpus]\nbogus = 1\n");
         assert!(Config::parse(&raw).is_err());
     }
 

@@ -1,0 +1,13 @@
+[qdrant]
+url = "http://localhost:6334"
+
+[embedding]
+model = "bge-small-en-v1.5"
+
+[corpus]
+prefix = "eval-single-project"
+data_root = "data/single-project"
+
+[collection]
+# Set by `rig-rag promote --config eval/profiles/single-project/rig-rag.toml <collection>`.
+active = ""

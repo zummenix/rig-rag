@@ -28,11 +28,15 @@ pub fn hash_source_dir(dir: impl AsRef<Path>) -> Result<String> {
 }
 
 /// Per-source `(name, content hash)` pairs, in sources order.
-pub fn hash_sources(sources: &Sources) -> Result<Vec<(String, String)>> {
+pub fn hash_sources(
+    sources: &Sources,
+    data_root: impl AsRef<Path>,
+) -> Result<Vec<(String, String)>> {
+    let data_root = data_root.as_ref();
     sources
         .iter()
         .map(|source| {
-            let hash = hash_source_dir(source.dir())
+            let hash = hash_source_dir(source.dir(data_root))
                 .with_context(|| format!("failed to hash source {:?}", source.name))?;
             Ok((source.name.clone(), hash))
         })
@@ -54,24 +58,24 @@ pub fn combine<'a>(hashes: impl IntoIterator<Item = (&'a str, &'a str)>) -> Stri
     hex::encode(hasher.finalize())
 }
 
-/// Prefix shared by every collection this tool creates.
-pub const COLLECTION_PREFIX: &str = "docs";
-
-/// Collection name derived from the model slug and combined hash, sanitized for
-/// Qdrant (which only accepts ASCII alphanumerics, `-` and `_`).
-pub fn collection_name(model_slug: &str, combined: &str) -> String {
+/// Collection name derived from the corpus prefix, model slug, and combined
+/// hash, sanitized for Qdrant (which only accepts ASCII alphanumerics, `-` and
+/// `_`). The production prefix is [`crate::config::DEFAULT_CORPUS_PREFIX`].
+pub fn collection_name(prefix: &str, model_slug: &str, combined: &str) -> String {
     format!(
-        "{COLLECTION_PREFIX}-{}-{}",
+        "{}-{}-{}",
+        sanitize(prefix),
         sanitize(model_slug),
         &combined[..12.min(combined.len())]
     )
 }
 
-/// Recovers the (sanitized) model slug from a collection name, e.g.
-/// `docs-bge-small-en-v1-5-0123456789ab` -> `bge-small-en-v1-5`.
-pub fn model_of(collection: &str) -> Option<&str> {
+/// Recovers the (sanitized) model slug from a collection name built by
+/// [`collection_name`], e.g. `docs-bge-small-en-v1-5-0123456789ab` with prefix
+/// `docs` -> `bge-small-en-v1-5`.
+pub fn model_of<'a>(prefix: &str, collection: &'a str) -> Option<&'a str> {
     let rest = collection
-        .strip_prefix(COLLECTION_PREFIX)?
+        .strip_prefix(&sanitize(prefix))?
         .strip_prefix('-')?;
     rest.rsplit_once('-').map(|(model, _hash)| model)
 }
@@ -174,15 +178,34 @@ mod tests {
     #[test]
     fn collection_name_is_qdrant_safe() {
         assert_eq!(
-            collection_name("bge-small-en-v1.5", "0123456789abcdef"),
+            collection_name("docs", "bge-small-en-v1.5", "0123456789abcdef"),
             "docs-bge-small-en-v1-5-0123456789ab"
         );
     }
 
     #[test]
+    fn collection_name_uses_custom_prefix() {
+        assert_eq!(
+            collection_name(
+                "eval-single-project",
+                "bge-small-en-v1.5",
+                "0123456789abcdef"
+            ),
+            "eval-single-project-bge-small-en-v1-5-0123456789ab"
+        );
+    }
+
+    #[test]
     fn model_of_round_trips_collection_name() {
-        let name = collection_name("bge-small-en-v1.5", "0123456789abcdef");
-        assert_eq!(model_of(&name), Some("bge-small-en-v1-5"));
-        assert_eq!(model_of("unrelated"), None);
+        let name = collection_name("docs", "bge-small-en-v1.5", "0123456789abcdef");
+        assert_eq!(model_of("docs", &name), Some("bge-small-en-v1-5"));
+        assert_eq!(model_of("other", &name), None);
+        assert_eq!(model_of("docs", "unrelated"), None);
+
+        let name = collection_name("eval-multi-project", "bge-small-en-v1.5", "0123456789ab");
+        assert_eq!(
+            model_of("eval-multi-project", &name),
+            Some("bge-small-en-v1-5")
+        );
     }
 }
