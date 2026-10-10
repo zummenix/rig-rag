@@ -111,9 +111,10 @@ both labelled at the run's `--latency-k`.
 
 ## Reporting
 
-`eval/report/framework/` renders a committed `results.json` into one
+`eval/report/framework/` renders one run's committed parts into one
 self-contained HTML document (inline CSS + inline SVG, no scripts, fonts, or
-network references). `render_report` takes a loaded results document and
+network references): a retrieval part (`results.json`) and one ingestion part per
+profile (`ingest-<profile>.json`). `render_report` takes the loaded parts and
 returns the HTML; the per-experiment scripts are thin wrappers:
 
 ```sh
@@ -137,9 +138,17 @@ set and latency k. `eval/report/tests/fixtures/` holds a committed results
 fixture per shape, and `eval/report/tests/` asserts both render and that a
 future version fails loudly.
 
-Ingestion data (`ingest-<profile>.json`) is a **separate artifact** and is not
-part of this report yet: composing it into an optional ingestion section is
-planned for **P5** (see `docs/eval-plan.md`).
+Ingestion data (`ingest-<profile>.json`) is a **separate, independently
+versioned contract** (`eval/report/framework/ingest.py`) and is composed into an
+optional ingestion section. A run directory's parts are discovered
+automatically — the newest run that holds any part is rendered with every
+`ingest-*.json` beside its `results.json`. Use `--no-ingest` / `--no-retrieval`
+to select parts, `--ingest <path>` (repeatable) to name specific ingestion
+reports, and `--commit <sha>` to declare the measured commit when rendering an
+ingest-only report (one with no sibling `results.json`). The ingestion section
+leads with `status` and marks a `reused` report as **cost not measured**: a
+reused collection gathers no counts or tokens, so measuring real ingest cost
+requires `--force` (or a new collection).
 
 ## Metrics
 

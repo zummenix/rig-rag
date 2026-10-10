@@ -325,3 +325,90 @@ def grouped_bar_chart(
     parts.append(_legend([(entry.name, entry.color) for entry in series], frame))
     parts.append("</svg>")
     return "".join(parts)
+
+
+# One color per phase row in a waterfall, cycling if there are more rows.
+_PHASE_COLORS = (
+    "#2563eb",  # blue
+    "#0f766e",  # teal
+    "#b45309",  # amber
+    "#7c3aed",  # violet
+    "#dc2626",  # red
+    "#0891b2",  # cyan
+)
+
+
+def waterfall(
+    phases: list[tuple[str, float]],
+    *,
+    total: float | None = None,
+    title: str = "",
+    width: int = 720,
+    row_height: int = 24,
+) -> str:
+    """A horizontal timeline of sequential phases, like a network waterfall.
+
+    Each ``(label, duration)`` is drawn as a bar that starts where the previous
+    one ended: the offset is the cumulative start and the width is the duration.
+    All values share one unit (the caller's). When ``total`` is given it sets the
+    axis span, so any time not attributed to a listed phase shows as trailing
+    space rather than being silently redistributed.
+    """
+
+    rows = [(label, max(0.0, float(value))) for label, value in phases]
+    if not rows:
+        raise ValueError("waterfall needs at least one phase")
+    summed = sum(value for _, value in rows)
+    axis_max = max([summed, float(total or 0.0), 1.0])
+
+    label_w = 96
+    value_w = 72
+    right = 12
+    top = 10
+    bottom = 28
+    height = top + row_height * len(rows) + bottom
+    x0 = label_w
+    x1 = width - right - value_w
+    plot_w = max(1.0, x1 - x0)
+    base_y = top + row_height * len(rows)
+
+    def number(value: float) -> str:
+        return f"{value:.1f}" if axis_max < 50 else f"{value:,.0f}"
+
+    parts = _svg_open(width, height, title)
+    for tick in _ticks(0.0, axis_max, 5):
+        x = x0 + plot_w * (tick / axis_max)
+        parts.append(
+            f'<line x1="{x:.1f}" y1="{top - 2:.1f}" x2="{x:.1f}" y2="{base_y + 4:.1f}" '
+            f'stroke="{PALETTE["grid"]}" stroke-width="1"/>'
+        )
+        parts.append(
+            f'<text x="{x:.1f}" y="{base_y + 18:.1f}" text-anchor="middle" '
+            f'font-family="{_FONT}" font-size="10" fill="{PALETTE["muted"]}">'
+            f"{_esc(number(tick))}</text>"
+        )
+
+    cumulative = 0.0
+    for index, (label, value) in enumerate(rows):
+        row_y = top + index * row_height
+        bar_y = row_y + row_height * 0.2
+        bar_h = row_height * 0.6
+        start = x0 + plot_w * (cumulative / axis_max)
+        end = x0 + plot_w * ((cumulative + value) / axis_max)
+        mid_y = row_y + row_height * 0.72
+        parts.append(
+            f'<text x="{x0 - 8:.1f}" y="{mid_y:.1f}" text-anchor="end" '
+            f'font-family="{_FONT}" font-size="11" fill="{PALETTE["ink"]}">{_esc(label)}</text>'
+        )
+        parts.append(
+            f'<rect x="{start:.1f}" y="{bar_y:.1f}" width="{max(1.0, end - start):.1f}" '
+            f'height="{bar_h:.1f}" rx="1.5" fill="{_esc(_PHASE_COLORS[index % len(_PHASE_COLORS)])}"/>'
+        )
+        parts.append(
+            f'<text x="{width - right:.1f}" y="{mid_y:.1f}" text-anchor="end" '
+            f'font-family="{_FONT}" font-size="10" fill="{PALETTE["muted"]}">{_esc(number(value))}</text>'
+        )
+        cumulative += value
+
+    parts.append("</svg>")
+    return "".join(parts)

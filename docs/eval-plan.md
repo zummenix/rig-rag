@@ -1,11 +1,13 @@
 # Evaluation harness plan
 
-Status: **P1–P4 implemented; P5 pending.** This document records the decisions
+Status: **P1–P4 implemented; P5 in progress.** This document records the decisions
 taken for preparing `rig-rag` for experiments and evaluation. Work proceeds phase
 by phase (see [Phases](#phases)); the Rust plumbing (P1–P2), the Python
 retrieval runner (P3), and the HTML report framework (P4) have landed. P3 is
-validated end-to-end on **both** profiles (degradation deltas populated). P4
-renders retrieval only; ingestion reporting is deliberately folded into P5.
+validated end-to-end on **both** profiles (degradation deltas populated). P5's
+report-framework work (ingestion rendering, run-part discovery, part selection)
+and the drop-small-chunks code seam have landed; the baseline/treatment ingest
+runs are pending.
 
 ## Goal
 
@@ -96,6 +98,7 @@ eval/profiles/
   "collection": "eval-single-project-bge-small-en-v1-5-1a2b3c4d5e6f",
   "prefix": "eval-single-project",
   "force": false,
+  "min_chunk_tokens": 0,                // threshold applied; 0 keeps every chunk
   "model": { "slug": "bge-small-en-v1.5", "dimensions": 384 },
   "timing_ms": { "fetch": 0, "load": 0, "chunk": 0, "embed": 0, "insert": 0, "total": 0 },
   "memory": { "peak_rss_bytes": 0, "cgroup_peak_bytes": null },
@@ -120,8 +123,13 @@ Notes:
 
 - Peak RSS is reported via `libc::getrusage` so it works on macOS (today's
   `/proc/self/status` path is Linux-only); cgroup peak stays Linux-container-only.
-- Token counts are **not** gathered unless `--report` is passed (no tokenizer cost
-  in normal ingest). Chunk-token distribution feeds the "drop small chunks" experiment.
+- Token counts are **not** gathered unless `--report` is passed *or* the
+  `MIN_CHUNK_TOKENS` threshold is nonzero (no tokenizer cost in normal ingest).
+  With a nonzero threshold, per-chunk counts are gathered to filter, and
+  `chunks`/`tokens`/`chunk_tokens` describe the **kept** (embedded) set — so
+  `totals.embeddings == totals.chunks`, while `sources_detail[].documents` still
+  counts every loaded document. `min_chunk_tokens` records the threshold applied.
+  The chunk-token distribution feeds the "drop small chunks" experiment.
 
 ## Question set (`eval/questions.toml`)
 
@@ -434,6 +442,19 @@ and mark a `reused` report as "cost not measured" rather than showing zeros as
 free — a reused collection records no counts/tokens, so real cost requires a
 forced rebuild (`--force` or a new collection). Commit provenance comes from a
 sibling `results.json`, else from a commit the experiment script declares.
+
+**Done (framework + seam).** `eval/report/framework/ingest.py` (its own
+`INGEST_SUPPORTED_SCHEMA_VERSIONS`, `load_ingest`/`validate_ingest`/`cost_measured`)
+and `parts.py` (`discover_run_parts`/`latest_run`) land the version-aware ingest
+loader and run-part discovery; `render.py` composes an optional ingestion section
+(leading with `status`, marking `reused` as "cost not measured"), and the CLI
+gains `--no-retrieval`/`--no-ingest`/`--commit`. The production change — the
+`MIN_CHUNK_TOKENS` seam in `src/ingest.rs` (default `0`) and the
+`min_chunk_tokens` report field — is kept as a **separate, revertible commit** so
+the framework and the experiment record stay intact when it is reverted. Tests
+cover the ingest loader, run discovery, combined/ingest-only/reused rendering,
+and part selection. The measured A/B is pending the forced treatment (const `N`)
+run against the re-recorded baseline (const `0`).
 
 ## Open questions / risks
 

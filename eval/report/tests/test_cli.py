@@ -95,6 +95,67 @@ class ReportMainTest(unittest.TestCase):
             with quiet_stdout(), self.assertRaises(ResultsError):
                 report_main(experiment="baseline", repo_root=Path(tmp), argv=[])
 
+    def test_discovers_ingest_in_the_run_dir(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            make_repo(root, ["2026-01-01T00-00-00Z"])
+            run_dir = root / "eval" / "results" / "baseline" / "2026-01-01T00-00-00Z"
+            shutil.copyfile(
+                FIXTURES / "ingest" / "v1" / "ingest-single-project.json",
+                run_dir / "ingest-single-project.json",
+            )
+            with quiet_stdout():
+                report_main(experiment="baseline", repo_root=root, argv=[])
+            html = (root / "eval" / "reports" / "baseline.html").read_text(encoding="utf-8")
+            self.assertIn('id="ingestion"', html)
+            self.assertIn("ingest-single-project.json", html)
+
+    def test_no_ingest_drops_the_ingestion_part(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            make_repo(root, ["2026-01-01T00-00-00Z"])
+            run_dir = root / "eval" / "results" / "baseline" / "2026-01-01T00-00-00Z"
+            shutil.copyfile(
+                FIXTURES / "ingest" / "v1" / "ingest-single-project.json",
+                run_dir / "ingest-single-project.json",
+            )
+            with quiet_stdout():
+                report_main(experiment="baseline", repo_root=root, argv=["--no-ingest"])
+            html = (root / "eval" / "reports" / "baseline.html").read_text(encoding="utf-8")
+            self.assertNotIn('id="ingestion"', html)
+            self.assertIn("Retrieval quality", html)
+
+    def test_no_retrieval_renders_ingest_only_with_declared_commit(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            make_repo(root, ["2026-01-01T00-00-00Z"])
+            run_dir = root / "eval" / "results" / "baseline" / "2026-01-01T00-00-00Z"
+            shutil.copyfile(
+                FIXTURES / "ingest" / "v1" / "ingest-single-project.json",
+                run_dir / "ingest-single-project.json",
+            )
+            with quiet_stdout():
+                report_main(
+                    experiment="baseline",
+                    repo_root=root,
+                    argv=["--no-retrieval", "--commit", "deadbeef"],
+                )
+            html = (root / "eval" / "reports" / "baseline.html").read_text(encoding="utf-8")
+            self.assertIn("deadbeef", html)
+            self.assertNotIn("Retrieval quality", html)
+            self.assertIn('id="ingestion"', html)
+
+    def test_both_parts_disabled_raises(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            make_repo(root, ["2026-01-01T00-00-00Z"])
+            with quiet_stdout(), self.assertRaises(ResultsError):
+                report_main(
+                    experiment="baseline",
+                    repo_root=root,
+                    argv=["--no-retrieval", "--no-ingest"],
+                )
+
 
 if __name__ == "__main__":
     unittest.main()

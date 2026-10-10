@@ -3,6 +3,11 @@
 Each experiment ships a few-line `report.py` that calls `report_main`. Keeping
 the argument parsing here means an experiment only declares its id and its
 narrative notes, and every experiment's report behaves the same way.
+
+A run directory may hold a retrieval part (`results.json`), one ingestion part
+per profile (`ingest-<profile>.json`), both, or neither. By default the newest
+run that holds any part is rendered with whichever parts it contains; the flags
+below select parts explicitly (e.g. `--no-retrieval` for an ingest-only report).
 """
 
 from __future__ import annotations
@@ -10,7 +15,9 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from eval.report.framework import latest_results, load_results, render_report
+from eval.report.framework import ingest as ingest_contract, loader
+from eval.report.framework.parts import discover_run_parts, latest_run
+from eval.report.framework.render import render_report
 from eval.runner.paths import repo_relative
 
 # eval/report/framework/cli.py -> repository root
@@ -26,9 +33,34 @@ def build_parser(experiment: str) -> argparse.ArgumentParser:
         "--results",
         default=None,
         help=(
-            "results.json to render "
-            f"(default: the newest eval/results/{experiment}/<run>/results.json)"
+            "results.json to render (default: the newest "
+            f"eval/results/{experiment}/<run>/ that holds a part)"
         ),
+    )
+    parser.add_argument(
+        "--ingest",
+        action="append",
+        default=None,
+        metavar="PATH",
+        help=(
+            "ingest report to include; repeatable "
+            "(default: every ingest-*.json in the selected run directory)"
+        ),
+    )
+    parser.add_argument(
+        "--no-retrieval",
+        action="store_true",
+        help="omit the retrieval part (results.json)",
+    )
+    parser.add_argument(
+        "--no-ingest",
+        action="store_true",
+        help="omit the ingestion part(s) (ingest-*.json)",
+    )
+    parser.add_argument(
+        "--commit",
+        default=None,
+        help="measured commit for an ingest-only report (no sibling results.json declares one)",
     )
     parser.add_argument(
         "--out",
@@ -48,18 +80,51 @@ def report_main(
     root = Path(repo_root).resolve() if repo_root else _REPO_ROOT
     args = build_parser(experiment).parse_args(argv)
 
-    results_path = Path(args.results) if args.results else latest_results(
-        root / "eval" / "results" / experiment
-    )
-    out_path = Path(args.out) if args.out else root / "eval" / "reports" / f"{experiment}.html"
+    if args.no_retrieval and args.no_ingest:
+        raise loader.ResultsError("--no-retrieval and --no-ingest leave nothing to render")
 
-    results = load_results(results_path)
+    run_dir: Path | None = None
+    results_path: Path | None = None
+    if args.results:
+        results_path = Path(args.results)
+        run_dir = results_path.parent
+    else:
+        parts = latest_run(root / "eval" / "results" / experiment)
+        run_dir = parts.run_dir
+        results_path = parts.results
+
+    if args.ingest:
+        ingest_paths = [Path(path) for path in args.ingest]
+    elif run_dir is not None:
+        ingest_paths = list(discover_run_parts(run_dir).ingest)
+    else:
+        ingest_paths = []
+
+    if args.no_retrieval:
+        results_path = None
+    if args.no_ingest:
+        ingest_paths = []
+
+    if results_path is None and not ingest_paths:
+        raise loader.ResultsError(
+            f"no report parts to render for {experiment!r} "
+            "(no results.json and no ingest-*.json selected)"
+        )
+
+    results = loader.load_results(results_path) if results_path is not None else None
+    ingest_docs = [ingest_contract.load_ingest(path) for path in ingest_paths]
+
+    out_path = Path(args.out) if args.out else root / "eval" / "reports" / f"{experiment}.html"
     html = render_report(
         results,
+        ingest=ingest_docs,
         notes=notes,
-        results_path=repo_relative(results_path, root),
+        results_path=repo_relative(results_path, root) if results_path is not None else None,
+        ingest_paths=[repo_relative(path, root) for path in ingest_paths],
+        commit=args.commit,
+        experiment=experiment,
     )
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(html, encoding="utf-8")
-    print(f"wrote {out_path} ({len(html.encode('utf-8'))} bytes) from {results_path}")
+    print(f"wrote {out_path} ({len(html.encode('utf-8'))} bytes)")
     return 0

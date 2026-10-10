@@ -1,7 +1,14 @@
 import unittest
 from pathlib import Path
 
-from eval.report.framework import UnsupportedSchemaVersion, load_results, render_report
+from eval.report.framework import (
+    ResultsError,
+    UnsupportedIngestSchemaVersion,
+    UnsupportedSchemaVersion,
+    load_ingest,
+    load_results,
+    render_report,
+)
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -99,6 +106,55 @@ class RenderLegacyTest(unittest.TestCase):
         # The swept k set is derived from the file; both labels reach the chart.
         self.assertIn(">1<", html)
         self.assertIn(">7<", html)
+
+
+class RenderIngestTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.results = load_results(FIXTURES / "v1" / "results.json")
+        cls.ingest = load_ingest(FIXTURES / "ingest" / "v1" / "ingest-single-project.json")
+        cls.reused = load_ingest(FIXTURES / "ingest" / "v1_reused" / "ingest-single-project.json")
+
+    def test_combined_render_has_both_parts(self):
+        html = render_report(self.results, ingest=[self.ingest])
+        self.assertIn('id="ingestion"', html)
+        self.assertIn("Retrieval quality", html)
+        self.assertIn("status: created", html)
+        self.assertIn("Chunk-token distribution", html)
+        self.assertIn("&lt;50", html)  # the bucket label is escaped
+        self.assertIn("Min chunk tokens", html)
+        self.assertIn("phase timeline", html.lower())
+
+    def test_ingest_only_renders_with_declared_commit(self):
+        html = render_report(None, ingest=[self.ingest], commit="deadbeef", experiment="drop-small-chunks")
+        self.assertIn("deadbeef", html)
+        self.assertIn("drop-small-chunks", html)
+        self.assertIn('id="ingestion"', html)
+        self.assertNotIn("Retrieval quality", html)
+
+    def test_reused_is_marked_cost_not_measured(self):
+        html = render_report(None, ingest=[self.reused], commit="deadbeef")
+        self.assertIn("Cost not measured", html)
+        # A reused collection records nothing, so the zero cost tables stay out.
+        self.assertNotIn("Chunk-token distribution", html)
+        self.assertNotIn(">Embeddings<", html)
+        self.assertNotIn(">Timing<", html)
+
+    def test_combined_is_self_contained(self):
+        html = render_report(self.results, ingest=[self.ingest, self.reused])
+        lowered = html.lower()
+        for needle in ("<script", "<link", "@import", 'src="http', 'href="http', "url(http"):
+            self.assertNotIn(needle, lowered)
+
+    def test_unknown_ingest_version_is_refused(self):
+        bad = dict(self.ingest)
+        bad["schema_version"] = 99
+        with self.assertRaises(UnsupportedIngestSchemaVersion):
+            render_report(self.results, ingest=[bad])
+
+    def test_nothing_to_render(self):
+        with self.assertRaises(ResultsError):
+            render_report(None)
 
 
 if __name__ == "__main__":
