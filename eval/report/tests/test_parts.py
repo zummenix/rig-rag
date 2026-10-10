@@ -2,7 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from eval.report.framework import ResultsError
+from eval.report.framework import ResultsError, load_run, resolve_run
 from eval.report.framework.parts import discover_run_parts, latest_run
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -66,6 +66,48 @@ class LatestRunTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             with self.assertRaises(ResultsError):
                 latest_run(Path(tmp))
+
+
+class LoadRunTest(unittest.TestCase):
+    def test_loads_results_and_ingest_keyed_by_profile(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            run = Path(tmp) / "run"
+            plant(run / "results.json", FIXTURES / "v1" / "results.json")
+            plant(run / "ingest-single-project.json", CREATED)
+            loaded = load_run(run)
+            self.assertIsNotNone(loaded.results)
+            self.assertIn("baseline", loaded.label)
+            self.assertEqual(loaded.ingest_by_profile()["single-project"]["status"], "created")
+
+    def test_empty_run_directory_raises(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaises(ResultsError):
+                load_run(Path(tmp) / "missing")
+
+    def test_resolve_by_experiment_id_picks_newest(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            for run in ("2026-01-01T00-00-00Z", "2026-02-01T00-00-00Z"):
+                plant(
+                    root / "eval" / "results" / "baseline" / run / "results.json",
+                    FIXTURES / "v1" / "results.json",
+                )
+            loaded = resolve_run("baseline", root=root)
+            self.assertIsNotNone(loaded.results)
+
+    def test_resolve_by_run_directory_path(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            run = Path(tmp) / "run"
+            plant(run / "results.json", FIXTURES / "v1" / "results.json")
+            self.assertIsNotNone(resolve_run(run, root=tmp).results)
+
+    def test_resolve_by_results_file_uses_its_directory_for_ingest(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            run = Path(tmp) / "run"
+            plant(run / "results.json", FIXTURES / "v1" / "results.json")
+            plant(run / "ingest-single-project.json", CREATED)
+            loaded = resolve_run(run / "results.json", root=tmp)
+            self.assertTrue(loaded.ingest_by_profile())
 
 
 if __name__ == "__main__":

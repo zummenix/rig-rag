@@ -1,13 +1,13 @@
 # Evaluation harness plan
 
-Status: **P1–P4 implemented; P5 in progress.** This document records the decisions
-taken for preparing `rig-rag` for experiments and evaluation. Work proceeds phase
-by phase (see [Phases](#phases)); the Rust plumbing (P1–P2), the Python
-retrieval runner (P3), and the HTML report framework (P4) have landed. P3 is
-validated end-to-end on **both** profiles (degradation deltas populated). P5's
-report-framework work (ingestion rendering, run-part discovery, part selection)
-and the drop-small-chunks code seam have landed; the baseline/treatment ingest
-runs are pending.
+Status: **P1–P5 implemented.** This document records the decisions taken for
+preparing `rig-rag` for experiments and evaluation. Work proceeds phase by phase
+(see [Phases](#phases)); the Rust plumbing (P1–P2), the Python retrieval runner
+(P3), the HTML report framework (P4), and P5 (ingestion rendering, baseline-vs-
+candidate comparison, and the drop-small-chunks arm — measured and **rejected**)
+have landed. P3 is validated end-to-end on **both** profiles (degradation deltas
+populated). See `eval/experiments/drop_small_chunks.md` for the P5 result and
+decision.
 
 ## Goal
 
@@ -241,14 +241,21 @@ Candidate `results.json` shape (subject to P3 refinement):
   refuses unknown future versions with a clear message.
 - The results JSON is a committed artifact, so any previous experiment can be
   re-rendered.
-- **Two artifacts, composed at render time (deferred to P5).** Retrieval
+- **Two artifacts, composed at render time.** Retrieval
   (`results.json`) and ingestion (`ingest-<profile>.json`) are independent,
-  separately versioned contracts. The framework will load each with its own
-  supported-version list and render whichever parts a run contains, so
+  separately versioned contracts. The framework loads each with its own
+  supported-version list and renders whichever parts a run contains, so
   ingest-only, retrieval-only, and combined documents are all valid. The
   ingestion section leads with `status` and marks a `reused` report as "cost not
   measured" (a reused collection records no counts/tokens); commit provenance
   comes from a sibling `results.json`, else from a declared commit.
+- **Comparison.** An experiment's `report.py` declares a baseline run (an
+  experiment id, resolved to its newest run, or a path; `--baseline` overrides,
+  `--no-baseline` disables). The report then leads with a diff of ingest cost
+  (embeddings/tokens/chunks/per-phase ms/peak RSS), retrieval aggregates
+  (recall@k, purity@k, MRR@k, p50/p95, no-hit rate), and per-question
+  recall/purity — computed at render time from the two committed runs, so it
+  changes no contract and either run stays independently renderable.
 
 ## Experiment lifecycle (jj + git)
 
@@ -443,7 +450,7 @@ free — a reused collection records no counts/tokens, so real cost requires a
 forced rebuild (`--force` or a new collection). Commit provenance comes from a
 sibling `results.json`, else from a commit the experiment script declares.
 
-**Done (framework + seam).** `eval/report/framework/ingest.py` (its own
+**Done.** `eval/report/framework/ingest.py` (its own
 `INGEST_SUPPORTED_SCHEMA_VERSIONS`, `load_ingest`/`validate_ingest`/`cost_measured`)
 and `parts.py` (`discover_run_parts`/`latest_run`) land the version-aware ingest
 loader and run-part discovery; `render.py` composes an optional ingestion section
@@ -453,8 +460,23 @@ gains `--no-retrieval`/`--no-ingest`/`--commit`. The production change — the
 `min_chunk_tokens` report field — is kept as a **separate, revertible commit** so
 the framework and the experiment record stay intact when it is reverted. Tests
 cover the ingest loader, run discovery, combined/ingest-only/reused rendering,
-and part selection. The measured A/B is pending the forced treatment (const `N`)
-run against the re-recorded baseline (const `0`).
+and part selection.
+
+**First arm (`MIN_CHUNK_TOKENS = 15`).** Measured against the re-recorded
+baseline (`0`) on both profiles (baseline run `2026-10-10T15-58-51Z`, treatment
+`2026-10-10T16-51-52Z`): multi-project embeddings fell 9,956 → 9,504 (−4.5%) and
+embed/total time ~4.8% (almost all of it `podman`'s tiny fragments); single-project
+dropped 0.6% of embeddings and was within noise. No per-question `recall@7`
+changed in either profile; the only quality movement was `cross-project-config`
+purity@7 `1.000 → 0.857` (a non-gold hit entered its top-7), recall `0.0` in both
+arms. The suite is small (3 single / 6 multi answerable), so it bounds large
+recall regressions only.
+
+**Decision: not adopted.** Production reverts to embedding every chunk (the
+production commit is reverted): the cost win is small and corpus-skewed, and the
+suite is too weak to certify no recall regression. The measured runs and the
+treatment commit stay in history. Full record, reproduction, and rationale:
+`eval/experiments/drop_small_chunks.md`.
 
 ## Open questions / risks
 

@@ -150,6 +150,23 @@ leads with `status` and marks a `reused` report as **cost not measured**: a
 reused collection gathers no counts or tokens, so measuring real ingest cost
 requires `--force` (or a new collection).
 
+### Comparison (baseline vs candidate)
+
+An experiment's `report.py` can name the run it diffs against
+(`report_main(..., baseline="baseline")`); the report then leads with a
+**Comparison** section. It diffs the two runs' ingest cost
+(embeddings/tokens/chunks/per-phase ms/peak RSS, with a baseline-vs-candidate bar
+chart), their retrieval aggregates (recall@k, purity@k, MRR@k, p50/p95, no-hit
+rate, with a dashed-baseline vs solid-candidate recall@k chart), and a
+per-question recall/purity table with changed rows bolded. A `reused` baseline
+ingest is flagged "cost not measured" rather than diffed as free.
+
+The baseline is an experiment id (its newest run) or a path (run dir or
+`results.json`); override the declared one with `--baseline <id-or-path>` or drop
+it with `--no-baseline`. The diff is computed at render time from the two
+committed runs, so it needs no contract change and either run stays
+independently renderable.
+
 ## Metrics
 
 Fixed definitions (unit-tested in `eval/tests/test_metrics.py`):

@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import json
 
-from eval.report.framework import ingest as ingest_contract, layout, loader, svg
+from eval.report.framework import compare, ingest as ingest_contract, layout, loader, svg
 
 DASH = "\u2013"  # en dash for an undefined value
 
@@ -36,7 +36,11 @@ def _number(value: object, *, digits: int = 3) -> str:
         number = float(value)
     except (TypeError, ValueError):
         return str(value)
-    text = f"{number:.{digits}f}".rstrip("0").rstrip(".")
+    text = f"{number:.{digits}f}"
+    if "." in text:
+        # Trim trailing fractional zeros only. Stripping "0" unconditionally
+        # would corrupt an integer formatted at 0 digits (e.g. "550" -> "55").
+        text = text.rstrip("0").rstrip(".")
     return text if text not in ("", "-0") else "0"
 
 
@@ -548,9 +552,237 @@ def _footer(
     )
 
 
+def _fmt_metric(value: object, kind: str) -> str:
+    if value is None:
+        return DASH
+    if kind == "bytes":
+        return _bytes(value)
+    if kind == "ms":
+        return _number(value, digits=0)
+    if kind == "ms2":
+        return _number(value, digits=2)
+    if kind == "ratio":
+        return _number(value, digits=3)
+    return _number(value, digits=0)
+
+
+def _signed(value: object, kind: str) -> str:
+    if value is None:
+        return DASH
+    if value == 0:
+        return "0"
+    return ("+" if value > 0 else "-") + _fmt_metric(abs(value), kind)
+
+
+def _signed_percent(value: object) -> str:
+    if value is None:
+        return DASH
+    if value == 0:
+        return "0%"
+    return ("+" if value > 0 else "-") + _percent(abs(value), digits=1)
+
+
+def _delta_cell(value: object) -> object:
+    """A delta cell; a real change is bolded so regressions/improvements stand out."""
+
+    text = _signed(value, "ratio")
+    if value not in (None, 0):
+        return layout.Raw(f"<strong>{layout.esc(text)}</strong>")
+    return text
+
+
+def _candidate_label(results: dict | None) -> str:
+    if results is None:
+        return "candidate"
+    experiment = results.get("experiment") or "experiment"
+    run = results.get("run") or ""
+    return f"{experiment} ({run})" if run else str(experiment)
+
+
+def _comparison(
+    candidate_results: dict | None,
+    candidate_ingest: list[dict],
+    baseline: compare.Baseline,
+    k_values: tuple[int, ...],
+    latency_k: int,
+) -> str:
+    profiles = compare.combined_profiles(candidate_results, tuple(candidate_ingest), baseline)
+    if not profiles:
+        return ""
+
+    cand_ingest = {ingest_contract.profile_label(doc): doc for doc in candidate_ingest}
+    base_ingest = {ingest_contract.profile_label(doc): doc for doc in baseline.ingest}
+    cand_cost = {profile: compare.ingest_metrics(cand_ingest.get(profile)) for profile in profiles}
+    base_cost = {profile: compare.ingest_metrics(base_ingest.get(profile)) for profile in profiles}
+
+    blocks: list[str] = []
+    candidate_commit = (candidate_results or {}).get("commit") or ""
+    baseline_commit = (baseline.results or {}).get("commit") or ""
+    blocks.append(
+        layout.kv_table(
+            [
+                ("Candidate", _candidate_label(candidate_results)),
+                ("Baseline", baseline.label),
+                ("Candidate commit", _short_sha(candidate_commit) if candidate_commit else DASH),
+                ("Baseline commit", _short_sha(baseline_commit) if baseline_commit else DASH),
+            ]
+        )
+    )
+
+    # ---- ingest cost ----
+    if any(cand_cost[profile] or base_cost[profile] for profile in profiles):
+        headers: list[object] = ["Metric"]
+        for profile in profiles:
+            headers += [f"{profile} base", f"{profile} cand", "Δ", "Δ%"]
+        rows: list[list[object]] = []
+        for key, label, kind in compare.INGEST_ROWS:
+            row: list[object] = [label]
+            for profile in profiles:
+                base_value = base_cost[profile].get(key)
+                candidate_value = cand_cost[profile].get(key)
+                row += [
+                    _fmt_metric(base_value, kind),
+                    _fmt_metric(candidate_value, kind),
+                    _signed(compare.delta(base_value, candidate_value), kind),
+                    _signed_percent(compare.percent(base_value, candidate_value)),
+                ]
+            rows.append(row)
+        body = "<h3>Cost</h3>" + layout.table(headers, rows, numeric_from=1)
+        for key, label in (("embeddings", "Embeddings"), ("embed", "Embed ms")):
+            chart = svg.grouped_bar_chart(
+                profiles,
+                [
+                    svg.Series("baseline", [base_cost[p].get(key) for p in profiles], svg.PALETTE["muted"]),
+                    svg.Series("candidate", [cand_cost[p].get(key) for p in profiles], svg.PALETTE["single"]),
+                ],
+                value_format="0.0f",
+                y_label=label,
+                title=f"{label}: baseline vs candidate",
+            )
+            body += layout.figure(layout.Raw(chart), f"{label} by profile — baseline vs candidate.")
+        reused = [
+            profile
+            for profile in profiles
+            if base_ingest.get(profile) is not None and not ingest_contract.cost_measured(base_ingest[profile])
+        ]
+        if reused:
+            body += (
+                f'<p class="warn">Baseline cost not measured for '
+                f'{layout.esc(", ".join(reused))} — the collection was reused. Rebuild with '
+                "<code>--force</code> to diff cost.</p>"
+            )
+        blocks.append(body)
+
+    # ---- retrieval ----
+    if candidate_results is not None and baseline.results is not None:
+        cand_ret = {
+            profile: compare.retrieval_metrics(candidate_results, profile, k_values, latency_k)
+            for profile in profiles
+        }
+        base_ret = {
+            profile: compare.retrieval_metrics(baseline.results, profile, k_values, latency_k)
+            for profile in profiles
+        }
+        spec: list[tuple[str, str, str]] = [
+            (f"recall@{k}", f"recall@{k}", "ratio") for k in k_values
+        ]
+        spec += [
+            (f"purity@{latency_k}", f"purity@{latency_k}", "ratio"),
+            (f"mrr@{latency_k}", f"MRR@{latency_k}", "ratio"),
+            ("p50_ms", "p50 ms", "ms2"),
+            ("p95_ms", "p95 ms", "ms2"),
+            ("no_hit_rate", "no-hit rate", "ratio"),
+        ]
+        headers = ["Metric"]
+        for profile in profiles:
+            headers += [f"{profile} base", f"{profile} cand", "Δ"]
+        rows = []
+        for key, label, kind in spec:
+            row: list[object] = [label]
+            for profile in profiles:
+                base_value = base_ret[profile].get(key)
+                candidate_value = cand_ret[profile].get(key)
+                row += [
+                    _fmt_metric(base_value, kind),
+                    _fmt_metric(candidate_value, kind),
+                    _signed(compare.delta(base_value, candidate_value), kind),
+                ]
+            rows.append(row)
+
+        series = []
+        for profile in profiles:
+            color = _profile_color(profile)
+            series.append(
+                svg.Series(
+                    f"{profile} baseline",
+                    [base_ret[profile].get(f"recall@{k}") for k in k_values],
+                    color,
+                    dashed=True,
+                )
+            )
+            series.append(
+                svg.Series(
+                    f"{profile} candidate",
+                    [cand_ret[profile].get(f"recall@{k}") for k in k_values],
+                    color,
+                )
+            )
+        chart = svg.line_chart(
+            [str(k) for k in k_values],
+            series,
+            y_min=0.0,
+            y_max=1.0,
+            x_label="k",
+            y_label="mean recall@k",
+            title="Mean recall@k: baseline vs candidate",
+        )
+        body = "<h3>Retrieval</h3>" + layout.table(headers, rows, numeric_from=1)
+        body += layout.figure(
+            layout.Raw(chart), "Mean recall@k by profile — dashed = baseline, solid = candidate."
+        )
+        blocks.append(body)
+
+        # ---- per question ----
+        qheaders: list[object] = ["Profile", "id"]
+        qheaders += [
+            f"recall@{latency_k} base",
+            f"recall@{latency_k} cand",
+            "Δ recall",
+            f"purity@{latency_k} base",
+            f"purity@{latency_k} cand",
+            "Δ purity",
+        ]
+        qrows: list[list[object]] = []
+        for profile in profiles:
+            base_q = compare.question_metrics(baseline.results, profile, latency_k)
+            cand_q = compare.question_metrics(candidate_results, profile, latency_k)
+            for qid in list(cand_q) + [q for q in base_q if q not in cand_q]:
+                base_q_entry = base_q.get(qid, {})
+                cand_q_entry = cand_q.get(qid, {})
+                recall_delta = compare.delta(base_q_entry.get("recall"), cand_q_entry.get("recall"))
+                purity_delta = compare.delta(base_q_entry.get("purity"), cand_q_entry.get("purity"))
+                qrows.append(
+                    [
+                        profile,
+                        qid,
+                        _fmt_metric(base_q_entry.get("recall"), "ratio"),
+                        _fmt_metric(cand_q_entry.get("recall"), "ratio"),
+                        _delta_cell(recall_delta),
+                        _fmt_metric(base_q_entry.get("purity"), "ratio"),
+                        _fmt_metric(cand_q_entry.get("purity"), "ratio"),
+                        _delta_cell(purity_delta),
+                    ]
+                )
+        body = "<h3>Per question</h3>" + layout.table(qheaders, qrows, numeric_from=2)
+        blocks.append(body)
+
+    return layout.section("Comparison — candidate vs baseline", layout.Raw("".join(blocks)), anchor="comparison")
+
+
 def render_report(
     results: dict | None = None,
     *,
+    baseline: compare.Baseline | None = None,
     ingest: list[dict] | tuple[dict, ...] = (),
     title: str | None = None,
     subtitle: str | None = None,
@@ -590,6 +822,12 @@ def render_report(
     for document in ingest_docs:
         ingest_contract.validate_ingest(document)
 
+    if baseline is not None:
+        if baseline.results is not None:
+            loader.validate_results(baseline.results, source=f"{baseline.label} results.json")
+        for document in baseline.ingest:
+            ingest_contract.validate_ingest(document, source=f"{baseline.label} ingest report")
+
     if title is None:
         if results is None:
             title = f"Ingestion report — {name}" if name else "Ingestion report"
@@ -603,6 +841,7 @@ def render_report(
         _header(title, results, subtitle),
         _provenance(results, k_values, latency_k, ingest_docs, commit),
         _notes(notes) if notes else "",
+        _comparison(results, ingest_docs, baseline, k_values, latency_k) if baseline is not None else "",
         _ingestion(ingest_docs, ingest_path_list) if ingest_docs else "",
         _summary(results, profiles, k_values, latency_k) if results is not None else "",
         _quality(results, profiles, k_values, latency_k) if results is not None else "",

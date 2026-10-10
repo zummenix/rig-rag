@@ -10,6 +10,7 @@ self-contained HTML string. `latest_run` / `discover_run_parts` locate the parts
 a run directory holds.
 """
 
+from eval.report.framework.compare import Baseline
 from eval.report.framework.ingest import (
     INGEST_LATEST_SCHEMA_VERSION,
     INGEST_SUPPORTED_SCHEMA_VERSIONS,
@@ -31,7 +32,14 @@ from eval.report.framework.loader import (
     swept_k_values,
     validate_results,
 )
-from eval.report.framework.parts import RunParts, discover_run_parts, latest_run
+from eval.report.framework.parts import (
+    LoadedRun,
+    RunParts,
+    discover_run_parts,
+    latest_run,
+    load_run,
+    resolve_run,
+)
 from eval.report.framework.render import render_report
 
 __all__ = [
@@ -39,7 +47,9 @@ __all__ = [
     "INGEST_SUPPORTED_SCHEMA_VERSIONS",
     "LATEST_SCHEMA_VERSION",
     "SUPPORTED_SCHEMA_VERSIONS",
+    "Baseline",
     "IngestError",
+    "LoadedRun",
     "ResultsError",
     "RunParts",
     "UnsupportedIngestSchemaVersion",
@@ -51,8 +61,10 @@ __all__ = [
     "latest_run",
     "load_ingest",
     "load_results",
+    "load_run",
     "ordered_profiles",
     "render_report",
+    "resolve_run",
     "swept_k_values",
     "validate_ingest",
     "validate_results",

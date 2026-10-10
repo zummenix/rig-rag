@@ -15,8 +15,8 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from eval.report.framework import ingest as ingest_contract, loader
-from eval.report.framework.parts import discover_run_parts, latest_run
+from eval.report.framework import compare, ingest as ingest_contract, loader
+from eval.report.framework.parts import discover_run_parts, latest_run, resolve_run
 from eval.report.framework.render import render_report
 from eval.runner.paths import repo_relative
 
@@ -58,6 +58,20 @@ def build_parser(experiment: str) -> argparse.ArgumentParser:
         help="omit the ingestion part(s) (ingest-*.json)",
     )
     parser.add_argument(
+        "--baseline",
+        default=None,
+        metavar="ID_OR_PATH",
+        help=(
+            "run to diff against: an experiment id (its newest run) or a path "
+            "(run directory or results.json); default: the experiment's declared baseline"
+        ),
+    )
+    parser.add_argument(
+        "--no-baseline",
+        action="store_true",
+        help="render without the comparison section even if a baseline is declared",
+    )
+    parser.add_argument(
         "--commit",
         default=None,
         help="measured commit for an ingest-only report (no sibling results.json declares one)",
@@ -74,6 +88,7 @@ def report_main(
     *,
     experiment: str,
     notes: tuple[str, ...] = (),
+    baseline: str | None = None,
     repo_root: str | Path | None = None,
     argv: list[str] | None = None,
 ) -> int:
@@ -114,10 +129,21 @@ def report_main(
     results = loader.load_results(results_path) if results_path is not None else None
     ingest_docs = [ingest_contract.load_ingest(path) for path in ingest_paths]
 
+    baseline_ref = None if args.no_baseline else (args.baseline or baseline)
+    comparison = None
+    if baseline_ref is not None:
+        loaded = resolve_run(baseline_ref, root=root)
+        comparison = compare.Baseline(
+            label=loaded.label,
+            results=loaded.results,
+            ingest=loaded.ingest_documents(),
+        )
+
     out_path = Path(args.out) if args.out else root / "eval" / "reports" / f"{experiment}.html"
     html = render_report(
         results,
         ingest=ingest_docs,
+        baseline=comparison,
         notes=notes,
         results_path=repo_relative(results_path, root) if results_path is not None else None,
         ingest_paths=[repo_relative(path, root) for path in ingest_paths],
@@ -126,5 +152,6 @@ def report_main(
     )
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(html, encoding="utf-8")
-    print(f"wrote {out_path} ({len(html.encode('utf-8'))} bytes)")
+    against = f" vs {comparison.label}" if comparison is not None else ""
+    print(f"wrote {out_path} ({len(html.encode('utf-8'))} bytes){against}")
     return 0

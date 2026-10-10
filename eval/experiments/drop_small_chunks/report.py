@@ -10,15 +10,17 @@ From the repository root:
 from eval.report.framework.cli import report_main
 
 NOTES = (
-    "Controlled change: `MIN_CHUNK_TOKENS` in `src/ingest.rs` raised from 0 so "
-    "chunks below the threshold are skipped before embedding; chunking, the "
-    "embedding model, retrieval, and the serve path are unchanged.",
-    "Cost and quality are compared against the re-recorded baseline at "
-    "`MIN_CHUNK_TOKENS = 0` (its forced ingest records real cost).",
-    "Retrieval is deterministic per (question, k); latency is measured at the "
-    "recorded latency k after warmup.",
+    "Controlled change: `MIN_CHUNK_TOKENS` in `src/ingest.rs` set to 15 (from "
+    "production 0), so chunks below 15 tokens are skipped before embedding; "
+    "chunking, the embedding model, retrieval, and the serve path are unchanged.",
+    "Versus the re-recorded baseline (`MIN_CHUNK_TOKENS = 0`): multi-project "
+    "embeddings fell ~4.5% and its embed/total time ~4.8%, with no recall@k "
+    "change; single-project cost was within noise. See "
+    "eval/experiments/drop_small_chunks.md.",
+    "The question set is small (3 single / 6 multi answerable), so this bounds "
+    "large recall regressions only, not small ones.",
 )
 
 
 if __name__ == "__main__":
-    raise SystemExit(report_main(experiment="drop_small_chunks", notes=NOTES))
+    raise SystemExit(report_main(experiment="drop_small_chunks", notes=NOTES, baseline="baseline"))

@@ -19,11 +19,11 @@ def quiet_stdout():
         yield
 
 
-def make_repo(root: Path, runs, source: str = "v1") -> None:
-    """Plants `<root>/eval/results/baseline/<run>/results.json` for each run."""
+def make_repo(root: Path, runs, source: str = "v1", experiment: str = "baseline") -> None:
+    """Plants `<root>/eval/results/<experiment>/<run>/results.json` for each run."""
 
     for run in runs:
-        run_dir = root / "eval" / "results" / "baseline" / run
+        run_dir = root / "eval" / "results" / experiment / run
         run_dir.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(FIXTURES / source / "results.json", run_dir / "results.json")
 
@@ -155,6 +155,48 @@ class ReportMainTest(unittest.TestCase):
                     repo_root=root,
                     argv=["--no-retrieval", "--no-ingest"],
                 )
+
+    def test_declared_baseline_renders_comparison(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            make_repo(root, ["2026-01-01T00-00-00Z"], experiment="baseline")
+            make_repo(root, ["2026-02-01T00-00-00Z"], experiment="candidate")
+            with quiet_stdout():
+                report_main(experiment="candidate", baseline="baseline", repo_root=root, argv=[])
+            html = (root / "eval" / "reports" / "candidate.html").read_text(encoding="utf-8")
+            self.assertIn('id="comparison"', html)
+
+    def test_no_baseline_flag_suppresses_comparison(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            make_repo(root, ["2026-01-01T00-00-00Z"], experiment="baseline")
+            make_repo(root, ["2026-02-01T00-00-00Z"], experiment="candidate")
+            with quiet_stdout():
+                report_main(
+                    experiment="candidate",
+                    baseline="baseline",
+                    repo_root=root,
+                    argv=["--no-baseline"],
+                )
+            html = (root / "eval" / "reports" / "candidate.html").read_text(encoding="utf-8")
+            self.assertNotIn('id="comparison"', html)
+
+    def test_baseline_override_flag(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            make_repo(root, ["2026-01-01T00-00-00Z"], experiment="baseline")
+            make_repo(root, ["2026-02-01T00-00-00Z"], experiment="candidate")
+            with quiet_stdout():
+                report_main(experiment="candidate", repo_root=root, argv=["--baseline", "baseline"])
+            html = (root / "eval" / "reports" / "candidate.html").read_text(encoding="utf-8")
+            self.assertIn('id="comparison"', html)
+
+    def test_missing_baseline_experiment_raises(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            make_repo(root, ["2026-02-01T00-00-00Z"], experiment="candidate")
+            with quiet_stdout(), self.assertRaises(ResultsError):
+                report_main(experiment="candidate", baseline="nope", repo_root=root, argv=[])
 
 
 if __name__ == "__main__":

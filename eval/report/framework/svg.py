@@ -43,11 +43,14 @@ class Series:
 
     A `None` value is a gap: the point is skipped and the line breaks. This is
     how a metric that is absent for some k is drawn without inventing a zero.
+    A `dashed` series draws a dashed line (and dashes its legend swatch), so a
+    baseline and a candidate of the same color can share one chart.
     """
 
     name: str
     values: list[float | None]
     color: str = PALETTE["single"]
+    dashed: bool = False
 
 
 def _esc(text: object) -> str:
@@ -117,22 +120,33 @@ def _svg_open(width: int, height: int, title: str) -> list[str]:
     return parts
 
 
-def _legend(entries: list[tuple[str, str]], frame: _Frame) -> str:
-    """A top-right legend drawn from `(label, color)` entries."""
+def _legend(entries: list[tuple[str, str, bool]], frame: _Frame) -> str:
+    """A top-right legend drawn from `(label, color, dashed)` entries.
+
+    A dashed entry is drawn as a dashed line swatch (matching a dashed series);
+    a solid one as a filled square.
+    """
 
     if not entries:
         return ""
     y = _LEGEND_TOP
     x = frame.x1
     swatch = _LEGEND_SWATCH
+    mid = y + swatch / 2
     parts: list[str] = []
-    for label, color in reversed(entries):
+    for label, color, dashed in reversed(entries):
         entry_width = swatch + 4 + len(label) * 6.2
         x -= entry_width + 12
-        parts.append(
-            f'<rect x="{x:.1f}" y="{y:.1f}" width="{swatch}" height="{swatch}" rx="2" '
-            f'fill="{_esc(color)}"/>'
-        )
+        if dashed:
+            parts.append(
+                f'<line x1="{x:.1f}" y1="{mid:.1f}" x2="{x + swatch:.1f}" y2="{mid:.1f}" '
+                f'stroke="{_esc(color)}" stroke-width="2" stroke-dasharray="4 3"/>'
+            )
+        else:
+            parts.append(
+                f'<rect x="{x:.1f}" y="{y:.1f}" width="{swatch}" height="{swatch}" rx="2" '
+                f'fill="{_esc(color)}"/>'
+            )
         parts.append(
             f'<text x="{x + swatch + 4:.1f}" y="{_LEGEND_TEXT_Y:.1f}" font-family="{_FONT}" '
             f'font-size="11" fill="{PALETTE["ink"]}">{_esc(label)}</text>'
@@ -215,7 +229,7 @@ def line_chart(
                 for index, value in segment
             ]
             if len(points) > 1:
-                parts.append(_polyline(points, entry.color))
+                parts.append(_polyline(points, entry.color, entry.dashed))
             for x, y in points:
                 parts.append(f'<circle cx="{x:.1f}" cy="{y:.1f}" r="3.2" fill="{_esc(entry.color)}"/>')
 
@@ -230,16 +244,17 @@ def line_chart(
             f'font-family="{_FONT}" font-size="11" fill="{PALETTE["muted"]}">{_esc(x_label)}</text>'
         )
 
-    parts.append(_legend([(entry.name, entry.color) for entry in series], frame))
+    parts.append(_legend([(entry.name, entry.color, entry.dashed) for entry in series], frame))
     parts.append("</svg>")
     return "".join(parts)
 
 
-def _polyline(points: list[tuple[float, float]], color: str) -> str:
+def _polyline(points: list[tuple[float, float]], color: str, dashed: bool = False) -> str:
     path = " ".join(f"{x:.1f},{y:.1f}" for x, y in points)
+    dash = ' stroke-dasharray="5 4"' if dashed else ""
     return (
         f'<polyline points="{path}" fill="none" stroke="{_esc(color)}" '
-        f'stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>'
+        f'stroke-width="2" stroke-linecap="round" stroke-linejoin="round"{dash}/>'
     )
 
 
@@ -322,7 +337,7 @@ def grouped_bar_chart(
             f'font-size="11" fill="{PALETTE["muted"]}">{_esc(y_label)}</text>'
         )
 
-    parts.append(_legend([(entry.name, entry.color) for entry in series], frame))
+    parts.append(_legend([(entry.name, entry.color, entry.dashed) for entry in series], frame))
     parts.append("</svg>")
     return "".join(parts)
 
