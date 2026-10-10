@@ -126,12 +126,16 @@ def resolve_run(reference: str | Path, *, root: str | Path) -> LoadedRun:
     """Loads a run named by an experiment id or by a path.
 
     An existing path is used directly — a run directory, or a `results.json`
-    whose directory supplies the ingestion parts. Anything else is an experiment
-    id under `<root>/eval/results/<id>`, resolved to its newest run with parts.
+    whose directory supplies the ingestion parts. A relative path that does not
+    exist against the process's cwd is also tried against `root`, so an
+    experiment can pin a specific run with a repo-relative path. Anything else is
+    an experiment id under `<root>/eval/results/<id>`, resolved to its newest run
+    with parts.
     """
 
     path = Path(reference)
-    if path.exists():
-        return load_run(path.parent if path.is_file() else path)
+    for candidate in (path, Path(root) / path):
+        if candidate.exists():
+            return load_run(candidate.parent if candidate.is_file() else candidate)
     experiment_dir = Path(root) / "eval" / "results" / reference
     return load_run(latest_run(experiment_dir).run_dir)

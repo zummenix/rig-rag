@@ -101,6 +101,15 @@ class LoadRunTest(unittest.TestCase):
             plant(run / "results.json", FIXTURES / "v1" / "results.json")
             self.assertIsNotNone(resolve_run(run, root=tmp).results)
 
+    def test_resolve_by_root_relative_path(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            run = root / "eval" / "results" / "baseline" / "2026-01-01T00-00-00Z"
+            plant(run / "results.json", FIXTURES / "v1" / "results.json")
+            loaded = resolve_run("eval/results/baseline/2026-01-01T00-00-00Z", root=root)
+            self.assertIsNotNone(loaded.results)
+            self.assertEqual(loaded.parts.run_dir, run)
+
     def test_resolve_by_results_file_uses_its_directory_for_ingest(self):
         with tempfile.TemporaryDirectory() as tmp:
             run = Path(tmp) / "run"

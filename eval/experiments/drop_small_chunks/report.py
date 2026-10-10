@@ -9,6 +9,11 @@ From the repository root:
 
 from eval.report.framework.cli import report_main
 
+# Pinned by path (not experiment id) so the record's hard-coded deltas keep
+# matching this report as newer baseline runs are recorded. See
+# eval/experiments/drop_small_chunks.md.
+BASELINE_RUN = "eval/results/baseline/2026-10-10T15-58-51Z"
+
 NOTES = (
     "Controlled change: `MIN_CHUNK_TOKENS` in `src/ingest.rs` set to 15 (from "
     "production 0), so chunks below 15 tokens are skipped before embedding; "
@@ -23,4 +28,6 @@ NOTES = (
 
 
 if __name__ == "__main__":
-    raise SystemExit(report_main(experiment="drop_small_chunks", notes=NOTES, baseline="baseline"))
+    raise SystemExit(
+        report_main(experiment="drop_small_chunks", notes=NOTES, baseline=BASELINE_RUN)
+    )
