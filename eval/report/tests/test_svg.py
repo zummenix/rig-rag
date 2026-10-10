@@ -44,6 +44,12 @@ class GroupedBarChartTest(unittest.TestCase):
         out = svg.grouped_bar_chart(["p"], [svg.Series("x", [None])])
         self.assertTrue(out.endswith("</svg>"))
 
+    def test_series_value_count_must_match_groups(self):
+        with self.assertRaises(ValueError):
+            svg.grouped_bar_chart(["p"], [svg.Series("x", [0.1, 0.2])])
+        with self.assertRaises(ValueError):
+            svg.grouped_bar_chart(["p", "q"], [svg.Series("x", [0.1])])
+
 
 if __name__ == "__main__":
     unittest.main()

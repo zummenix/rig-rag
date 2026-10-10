@@ -256,6 +256,13 @@ def grouped_bar_chart(
 ) -> str:
     """A grouped vertical bar chart; negative values diverge below a zero line."""
 
+    for entry in series:
+        if len(entry.values) != len(groups):
+            raise ValueError(
+                f"series {entry.name!r} has {len(entry.values)} values for "
+                f"{len(groups)} groups"
+            )
+
     values = [value for entry in series for value in entry.values if value is not None]
     lo = min([0.0, *values])
     hi = max([0.0, *values])
@@ -290,8 +297,6 @@ def grouped_bar_chart(
             f'font-family="{_FONT}" font-size="11" fill="{PALETTE["muted"]}">{_esc(group)}</text>'
         )
         for series_index, entry in enumerate(series):
-            if group_index >= len(entry.values):
-                continue
             value = entry.values[group_index]
             if value is None:
                 continue

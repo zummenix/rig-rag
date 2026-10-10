@@ -76,7 +76,7 @@ def _provenance(results: dict, k_values: tuple[int, ...], latency_k: int) -> str
 
     body = layout.kv_table(pairs)
     if env_pairs:
-        body += "<h4>Environment</h4>" + layout.kv_table(env_pairs)
+        body += "<h3>Environment</h3>" + layout.kv_table(env_pairs)
     return layout.section("Provenance", layout.Raw(body), anchor="provenance")
 
 
@@ -154,6 +154,7 @@ def _quality(
             "Answerable",
             f"hit@{latency_k}",
             f"recall@{latency_k}",
+            f"precision@{latency_k}",
             f"MRR@{latency_k}",
             f"purity@{latency_k}",
             "hits returned",
@@ -168,6 +169,7 @@ def _quality(
                     "yes",
                     _number(by_k.get("hit"), digits=0),
                     _number(by_k.get("recall")),
+                    _number(by_k.get("precision")),
                     _number(by_k.get("mrr")),
                     _number(by_k.get("purity")),
                     _number(by_k.get("hits_returned")),
@@ -181,10 +183,11 @@ def _quality(
                     DASH,
                     DASH,
                     DASH,
+                    DASH,
                     _number(by_k.get("hits_returned")),
                 ]
             rows.append(row)
-        blocks.append(f"<h4>{layout.esc(name)}</h4>")
+        blocks.append(f"<h3>{layout.esc(name)}</h3>")
         blocks.append(layout.table(headers, rows, numeric_from=3))
 
     return layout.section("Retrieval quality", layout.Raw("".join(blocks)), anchor="quality")
@@ -243,14 +246,15 @@ def _degradation(results: dict, k_values: tuple[int, ...], latency_k: int) -> st
 
     entry = next(iter(degradation.values()))
     compared = entry.get("questions_compared") or []
+    shared = f"{len(compared)} ({', '.join(compared)})" if compared else _number(0)
     pairs: list[tuple[str, object]] = [
         ("From → to", f"{entry.get('from', '')} → {entry.get('to', '')}"),
-        ("Shared questions", f"{len(compared)} ({', '.join(compared)})" if compared else _number(0)),
+        ("Shared questions", shared),
     ]
     for k in k_values:
-        pairs.append((f"Δ recall@{k}", entry.get(f"recall@{k}")))
-    pairs.append((f"Δ purity@{latency_k}", entry.get(f"purity@{latency_k}")))
-    pairs.append(("Δ p95 ms", entry.get("p95_ms")))
+        pairs.append((f"Δ recall@{k}", _number(entry.get(f"recall@{k}"))))
+    pairs.append((f"Δ purity@{latency_k}", _number(entry.get(f"purity@{latency_k}"))))
+    pairs.append(("Δ p95 ms", _number(entry.get("p95_ms"), digits=2)))
 
     delta_chart = svg.grouped_bar_chart(
         [f"k={k}" for k in k_values],
@@ -294,7 +298,11 @@ def _methodology() -> str:
         ("precision@k", "top-k hits covering at least one gold item / hits returned."),
         ("MRR@k", "reciprocal rank of the first hit covering any gold item."),
         ("source purity@k", "share of returned hits from the question's gold source(s)."),
-        ("no-hit rate", "for unanswerable questions, the share of k with no hit above threshold."),
+        (
+            "no-hit rate",
+            "for unanswerable questions, the share of (question, k) pairs with no hit "
+            "above the threshold, averaged over every unanswerable question and swept k.",
+        ),
     ]
     items = "".join(f"<dt>{layout.esc(name)}</dt><dd>{layout.esc(text)}</dd>" for name, text in definitions)
     return layout.section("Methodology", layout.Raw(f'<dl class="method">{items}</dl>'), anchor="methodology")

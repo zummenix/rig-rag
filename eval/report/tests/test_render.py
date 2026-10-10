@@ -41,6 +41,17 @@ class RenderCurrentTest(unittest.TestCase):
         self.assertIn("jj-author", self.html)
         self.assertIn("unanswerable-license", self.html)
 
+    def test_renders_precision_at_the_latency_k(self):
+        # precision is a contract metric, so it must be inspectable in the table
+        self.assertIn("precision@7", self.html)
+
+    def test_subsection_headings_do_not_skip_a_level(self):
+        # each section is an <h2>, so its subsections must be <h3>, not <h4>
+        self.assertIn("<h3>Environment</h3>", self.html)
+        self.assertNotIn("<h4>Environment</h4>", self.html)
+        self.assertNotIn("<h4>single-project</h4>", self.html)
+        self.assertNotIn("<h4>multi-project</h4>", self.html)
+
     def test_is_self_contained(self):
         lowered = self.html.lower()
         for needle in ("<script", "<link", "@import", 'src="http', 'href="http', "url(http"):
@@ -68,6 +79,17 @@ class RenderCurrentTest(unittest.TestCase):
         results["schema_version"] = 99
         with self.assertRaises(UnsupportedSchemaVersion):
             render_report(results)
+
+    def test_degradation_deltas_are_formatted(self):
+        results = load_results(FIXTURES / "v1" / "results.json")
+        entry = results["degradation"]["single-project->multi-project"]
+        entry["p95_ms"] = 1.0298999999999996
+        entry["recall@7"] = -0.33333333333333337
+        html = render_report(results)
+        self.assertNotIn("1.0298999999999996", html)
+        self.assertNotIn("0.33333333333333337", html)
+        self.assertIn("1.03", html)
+        self.assertIn("-0.333", html)
 
 
 class RenderLegacyTest(unittest.TestCase):
