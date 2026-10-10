@@ -1,0 +1,1592 @@
+{
+  "schema_version": 1,
+  "experiment": "baseline",
+  "run": "2026-10-10T15-05-44Z",
+  "started_at": "2026-10-10T15:05:44Z",
+  "commit": "a1a25288521bd52480ea97c93235a83c28e9e80a",
+  "commit_ref": "origin/zummenix/push-vmttruvkmxrn",
+  "config": {
+    "multi-project": {
+      "rig-rag.toml": {
+        "qdrant": {
+          "url": "http://localhost:6334"
+        },
+        "embedding": {
+          "model": "bge-small-en-v1.5"
+        },
+        "corpus": {
+          "prefix": "eval-multi-project",
+          "data_root": "data/multi-project"
+        },
+        "collection": {
+          "active": "eval-multi-project-bge-small-en-v1-5-a3ea89d89f3c"
+        }
+      },
+      "sources.json": [
+        {
+          "name": "jj",
+          "type": "git",
+          "url": "https://github.com/jj-vcs/jj",
+          "ref": "9a1ad09b16e87d5d5e25759e5027953f8257be98",
+          "path": "docs"
+        },
+        {
+          "name": "podman",
+          "type": "git",
+          "url": "https://github.com/podman-container-tools/podman",
+          "ref": "e3ed4e39137fbe457dbf09c4a9d66d6e1f31e365",
+          "path": "docs"
+        },
+        {
+          "name": "qdrant",
+          "type": "git",
+          "url": "https://github.com/qdrant/landing_page",
+          "ref": "9855e50fc739de44a223a1c50faced806a868b6a",
+          "path": "qdrant-landing/content/documentation"
+        }
+      ]
+    },
+    "single-project": {
+      "rig-rag.toml": {
+        "qdrant": {
+          "url": "http://localhost:6334"
+        },
+        "embedding": {
+          "model": "bge-small-en-v1.5"
+        },
+        "corpus": {
+          "prefix": "eval-single-project",
+          "data_root": "data/single-project"
+        },
+        "collection": {
+          "active": "eval-single-project-bge-small-en-v1-5-f017d3d86bc1"
+        }
+      },
+      "sources.json": [
+        {
+          "name": "jj",
+          "type": "git",
+          "url": "https://github.com/jj-vcs/jj",
+          "ref": "9a1ad09b16e87d5d5e25759e5027953f8257be98",
+          "path": "docs"
+        }
+      ]
+    }
+  },
+  "environment": {
+    "os": "darwin",
+    "arch": "arm64",
+    "python": "3.14.7",
+    "binary": "target/release/rig-rag",
+    "binary_sha256": "91589e64b795d9258ecc35530b07f1620043b47bc23014ed0c10e8b33671d0de",
+    "qdrant_url": "http://localhost:6334"
+  },
+  "k_values": [
+    1,
+    3,
+    5,
+    7,
+    10,
+    20
+  ],
+  "profiles": {
+    "multi-project": {
+      "prefix": "eval-multi-project",
+      "data_root": "data/multi-project",
+      "source_names": [
+        "jj",
+        "podman",
+        "qdrant"
+      ],
+      "latency": {
+        "warmup": 3,
+        "reps": 5,
+        "latency_k": 7,
+        "samples_ms": [
+          7.579,
+          7.479,
+          7.528,
+          7.611,
+          7.53,
+          7.905,
+          7.899,
+          7.938,
+          8.902,
+          8.125,
+          8.139,
+          7.988,
+          8.457,
+          8.093,
+          7.969,
+          8.031,
+          8.178,
+          8.123,
+          7.956,
+          8.042,
+          8.931,
+          8.835,
+          8.775,
+          8.84,
+          8.768,
+          7.569,
+          7.919,
+          7.854,
+          7.875,
+          7.821,
+          6.638,
+          7.624,
+          7.788,
+          6.623,
+          8.036
+        ],
+        "p50_ms": 7.956,
+        "p95_ms": 8.8586
+      },
+      "questions": [
+        {
+          "id": "jj-author",
+          "question": "Who is the author of jj?",
+          "answerable": true,
+          "gold": [
+            {
+              "source": "jj",
+              "path": "testimonials.md",
+              "must_contain": "project creator and leader"
+            }
+          ],
+          "notes": "The answer is worded 'project creator and leader'; the word 'author' appears only in unrelated design-doc metadata, so this measures paraphrase robustness.",
+          "by_k": {
+            "1": {
+              "answerable": true,
+              "hits_returned": 1,
+              "no_hit": null,
+              "hit": 0,
+              "recall": 0.0,
+              "precision": 0.0,
+              "mrr": 0.0,
+              "purity": 1.0,
+              "hits": [
+                "data/multi-project/jj/design/secure-config.md:2-5"
+              ]
+            },
+            "3": {
+              "answerable": true,
+              "hits_returned": 3,
+              "no_hit": null,
+              "hit": 0,
+              "recall": 0.0,
+              "precision": 0.0,
+              "mrr": 0.0,
+              "purity": 1.0,
+              "hits": [
+                "data/multi-project/jj/design/secure-config.md:2-5",
+                "data/multi-project/jj/design/managed-config.md:2-7",
+                "data/multi-project/jj/community_tools.md:130-137"
+              ]
+            },
+            "5": {
+              "answerable": true,
+              "hits_returned": 5,
+              "no_hit": null,
+              "hit": 0,
+              "recall": 0.0,
+              "precision": 0.0,
+              "mrr": 0.0,
+              "purity": 1.0,
+              "hits": [
+                "data/multi-project/jj/design/secure-config.md:2-5",
+                "data/multi-project/jj/design/managed-config.md:2-7",
+                "data/multi-project/jj/community_tools.md:130-137",
+                "data/multi-project/jj/community_tools.md:124-129",
+                "data/multi-project/jj/index.md:24-33"
+              ]
+            },
+            "7": {
+              "answerable": true,
+              "hits_returned": 7,
+              "no_hit": null,
+              "hit": 0,
+              "recall": 0.0,
+              "precision": 0.0,
+              "mrr": 0.0,
+              "purity": 1.0,
+              "hits": [
+                "data/multi-project/jj/design/secure-config.md:2-5",
+                "data/multi-project/jj/design/managed-config.md:2-7",
+                "data/multi-project/jj/community_tools.md:130-137",
+                "data/multi-project/jj/community_tools.md:124-129",
+                "data/multi-project/jj/index.md:24-33",
+                "data/multi-project/jj/contributing.md:562-607",
+                "data/multi-project/jj/design/run.md:2-13"
+              ]
+            },
+            "10": {
+              "answerable": true,
+              "hits_returned": 10,
+              "no_hit": null,
+              "hit": 0,
+              "recall": 0.0,
+              "precision": 0.0,
+              "mrr": 0.0,
+              "purity": 1.0,
+              "hits": [
+                "data/multi-project/jj/design/secure-config.md:2-5",
+                "data/multi-project/jj/design/managed-config.md:2-7",
+                "data/multi-project/jj/community_tools.md:130-137",
+                "data/multi-project/jj/community_tools.md:124-129",
+                "data/multi-project/jj/index.md:24-33",
+                "data/multi-project/jj/contributing.md:562-607",
+                "data/multi-project/jj/design/run.md:2-13",
+                "data/multi-project/jj/design/jj-converge-command.md:2-12",
+                "data/multi-project/jj/windows.md:108-116",
+                "data/multi-project/jj/governance/temporary-voting.md:14-24"
+              ]
+            },
+            "20": {
+              "answerable": true,
+              "hits_returned": 20,
+              "no_hit": null,
+              "hit": 0,
+              "recall": 0.0,
+              "precision": 0.0,
+              "mrr": 0.0,
+              "purity": 0.85,
+              "hits": [
+                "data/multi-project/jj/design/secure-config.md:2-5",
+                "data/multi-project/jj/design/managed-config.md:2-7",
+                "data/multi-project/jj/community_tools.md:130-137",
+                "data/multi-project/jj/community_tools.md:124-129",
+                "data/multi-project/jj/index.md:24-33",
+                "data/multi-project/jj/contributing.md:562-607",
+                "data/multi-project/jj/design/run.md:2-13",
+                "data/multi-project/jj/design/jj-converge-command.md:2-12",
+                "data/multi-project/jj/windows.md:108-116",
+                "data/multi-project/jj/governance/temporary-voting.md:14-24",
+                "data/multi-project/jj/community_tools.md:49-56",
+                "data/multi-project/podman/source/markdown/podman-quadlet-basic-usage.7.md:221-223",
+                "data/multi-project/jj/style_guide.md:155-204",
+                "data/multi-project/qdrant/headless/snippets/text-search/query-filter-authors-or/_description.md:1",
+                "data/multi-project/jj/install-and-setup.md:67-86",
+                "data/multi-project/jj/gerrit.md:2-14",
+                "data/multi-project/jj/design/run.md:152-157",
+                "data/multi-project/jj/contributing.md:480-487",
+                "data/multi-project/qdrant/headless/snippets/tutorial-semantic-search-101/generated/upload-data/go.md:1-52",
+                "data/multi-project/jj/install-and-setup.md:235-239"
+              ]
+            }
+          },
+          "latency_ms": [
+            7.579,
+            7.479,
+            7.528,
+            7.611,
+            7.53
+          ]
+        },
+        {
+          "id": "jj-config-set-user",
+          "question": "How do I set a configuration value for my user with jj?",
+          "answerable": true,
+          "gold": [
+            {
+              "source": "jj",
+              "path": "config.md",
+              "must_contain": "jj config set --user"
+            }
+          ],
+          "notes": "How-to / procedural. The command form is `jj config set --user <key> <value>`.",
+          "by_k": {
+            "1": {
+              "answerable": true,
+              "hits_returned": 1,
+              "no_hit": null,
+              "hit": 0,
+              "recall": 0.0,
+              "precision": 0.0,
+              "mrr": 0.0,
+              "purity": 1.0,
+              "hits": [
+                "data/multi-project/jj/config.md:2437-2457"
+              ]
+            },
+            "3": {
+              "answerable": true,
+              "hits_returned": 3,
+              "no_hit": null,
+              "hit": 0,
+              "recall": 0.0,
+              "precision": 0.0,
+              "mrr": 0.0,
+              "purity": 1.0,
+              "hits": [
+                "data/multi-project/jj/config.md:2437-2457",
+                "data/multi-project/jj/install-and-setup.md:222-230",
+                "data/multi-project/jj/config.md:2332-2374"
+              ]
+            },
+            "5": {
+              "answerable": true,
+              "hits_returned": 5,
+              "no_hit": null,
+              "hit": 0,
+              "recall": 0.0,
+              "precision": 0.0,
+              "mrr": 0.0,
+              "purity": 1.0,
+              "hits": [
+                "data/multi-project/jj/config.md:2437-2457",
+                "data/multi-project/jj/install-and-setup.md:222-230",
+                "data/multi-project/jj/config.md:2332-2374",
+                "data/multi-project/jj/design/secure-config.md:2-5",
+                "data/multi-project/jj/config.md:132-155"
+              ]
+            },
+            "7": {
+              "answerable": true,
+              "hits_returned": 7,
+              "no_hit": null,
+              "hit": 0,
+              "recall": 0.0,
+              "precision": 0.0,
+              "mrr": 0.0,
+              "purity": 1.0,
+              "hits": [
+                "data/multi-project/jj/config.md:2437-2457",
+                "data/multi-project/jj/install-and-setup.md:222-230",
+                "data/multi-project/jj/config.md:2332-2374",
+                "data/multi-project/jj/design/secure-config.md:2-5",
+                "data/multi-project/jj/config.md:132-155",
+                "data/multi-project/jj/config.md:2486-2489",
+                "data/multi-project/jj/config.md:6-53"
+              ]
+            },
+            "10": {
+              "answerable": true,
+              "hits_returned": 10,
+              "no_hit": null,
+              "hit": 0,
+              "recall": 0.0,
+              "precision": 0.0,
+              "mrr": 0.0,
+              "purity": 0.9,
+              "hits": [
+                "data/multi-project/jj/config.md:2437-2457",
+                "data/multi-project/jj/install-and-setup.md:222-230",
+                "data/multi-project/jj/config.md:2332-2374",
+                "data/multi-project/jj/design/secure-config.md:2-5",
+                "data/multi-project/jj/config.md:132-155",
+                "data/multi-project/jj/config.md:2486-2489",
+                "data/multi-project/jj/config.md:6-53",
+                "data/multi-project/jj/design/managed-config.md:251-255",
+                "data/multi-project/jj/config.md:2374-2387",
+                "data/multi-project/podman/source/markdown/options/userns.container.md:9-41"
+              ]
+            },
+            "20": {
+              "answerable": true,
+              "hits_returned": 20,
+              "no_hit": null,
+              "hit": 0,
+              "recall": 0.0,
+              "precision": 0.0,
+              "mrr": 0.0,
+              "purity": 0.8,
+              "hits": [
+                "data/multi-project/jj/config.md:2437-2457",
+                "data/multi-project/jj/install-and-setup.md:222-230",
+                "data/multi-project/jj/config.md:2332-2374",
+                "data/multi-project/jj/design/secure-config.md:2-5",
+                "data/multi-project/jj/config.md:132-155",
+                "data/multi-project/jj/config.md:2486-2489",
+                "data/multi-project/jj/config.md:6-53",
+                "data/multi-project/jj/design/managed-config.md:251-255",
+                "data/multi-project/jj/config.md:2374-2387",
+                "data/multi-project/podman/source/markdown/options/userns.container.md:9-41",
+                "data/multi-project/jj/config.md:2388-2401",
+                "data/multi-project/podman/source/markdown/options/userns.pod.md:7-8",
+                "data/multi-project/podman/source/markdown/options/userns.container.md:7-8",
+                "data/multi-project/jj/design/managed-config.md:2-7",
+                "data/multi-project/jj/config.md:2458-2485",
+                "data/multi-project/jj/design/managed-config.md:120-123",
+                "data/multi-project/jj/design/managed-config.md:150-172",
+                "data/multi-project/podman/source/markdown/options/userns.image.md:6-9",
+                "data/multi-project/jj/design/managed-config.md:173-179",
+                "data/multi-project/jj/config.md:244-254"
+              ]
+            }
+          },
+          "latency_ms": [
+            7.905,
+            7.899,
+            7.938,
+            8.902,
+            8.125
+          ]
+        },
+        {
+          "id": "jj-new-change",
+          "question": "How do I start a new change (commit) in jj?",
+          "answerable": true,
+          "gold": [
+            {
+              "source": "jj",
+              "path": "tutorial.md",
+              "must_contain": "That is what `jj new` is for"
+            }
+          ],
+          "notes": "API / reference. `jj new` creates a new commit on top of the current working-copy commit.",
+          "by_k": {
+            "1": {
+              "answerable": true,
+              "hits_returned": 1,
+              "no_hit": null,
+              "hit": 1,
+              "recall": 1.0,
+              "precision": 1.0,
+              "mrr": 1.0,
+              "purity": 1.0,
+              "hits": [
+                "data/multi-project/jj/tutorial.md:137-174"
+              ]
+            },
+            "3": {
+              "answerable": true,
+              "hits_returned": 3,
+              "no_hit": null,
+              "hit": 1,
+              "recall": 1.0,
+              "precision": 0.3333333333333333,
+              "mrr": 1.0,
+              "purity": 1.0,
+              "hits": [
+                "data/multi-project/jj/tutorial.md:137-174",
+                "data/multi-project/jj/tutorial.md:86-137",
+                "data/multi-project/jj/FAQ.md:473-478"
+              ]
+            },
+            "5": {
+              "answerable": true,
+              "hits_returned": 5,
+              "no_hit": null,
+              "hit": 1,
+              "recall": 1.0,
+              "precision": 0.2,
+              "mrr": 1.0,
+              "purity": 1.0,
+              "hits": [
+                "data/multi-project/jj/tutorial.md:137-174",
+                "data/multi-project/jj/tutorial.md:86-137",
+                "data/multi-project/jj/FAQ.md:473-478",
+                "data/multi-project/jj/FAQ.md:327-344",
+                "data/multi-project/jj/config.md:2234-2251"
+              ]
+            },
+            "7": {
+              "answerable": true,
+              "hits_returned": 7,
+              "no_hit": null,
+              "hit": 1,
+              "recall": 1.0,
+              "precision": 0.14285714285714285,
+              "mrr": 1.0,
+              "purity": 1.0,
+              "hits": [
+                "data/multi-project/jj/tutorial.md:137-174",
+                "data/multi-project/jj/tutorial.md:86-137",
+                "data/multi-project/jj/FAQ.md:473-478",
+                "data/multi-project/jj/FAQ.md:327-344",
+                "data/multi-project/jj/config.md:2234-2251",
+                "data/multi-project/jj/FAQ.md:512-525",
+                "data/multi-project/jj/FAQ.md:284-326"
+              ]
+            },
+            "10": {
+              "answerable": true,
+              "hits_returned": 10,
+              "no_hit": null,
+              "hit": 1,
+              "recall": 1.0,
+              "precision": 0.1,
+              "mrr": 1.0,
+              "purity": 1.0,
+              "hits": [
+                "data/multi-project/jj/tutorial.md:137-174",
+                "data/multi-project/jj/tutorial.md:86-137",
+                "data/multi-project/jj/FAQ.md:473-478",
+                "data/multi-project/jj/FAQ.md:327-344",
+                "data/multi-project/jj/config.md:2234-2251",
+                "data/multi-project/jj/FAQ.md:512-525",
+                "data/multi-project/jj/FAQ.md:284-326",
+                "data/multi-project/jj/config.md:306-330",
+                "data/multi-project/jj/tutorial.md:456-490",
+                "data/multi-project/jj/tutorial.md:523-573"
+              ]
+            },
+            "20": {
+              "answerable": true,
+              "hits_returned": 20,
+              "no_hit": null,
+              "hit": 1,
+              "recall": 1.0,
+              "precision": 0.05,
+              "mrr": 1.0,
+              "purity": 1.0,
+              "hits": [
+                "data/multi-project/jj/tutorial.md:137-174",
+                "data/multi-project/jj/tutorial.md:86-137",
+                "data/multi-project/jj/FAQ.md:473-478",
+                "data/multi-project/jj/FAQ.md:327-344",
+                "data/multi-project/jj/config.md:2234-2251",
+                "data/multi-project/jj/FAQ.md:512-525",
+                "data/multi-project/jj/FAQ.md:284-326",
+                "data/multi-project/jj/config.md:306-330",
+                "data/multi-project/jj/tutorial.md:456-490",
+                "data/multi-project/jj/tutorial.md:523-573",
+                "data/multi-project/jj/github.md:111-151",
+                "data/multi-project/jj/FAQ.md:152-175",
+                "data/multi-project/jj/tutorial.md:573-577",
+                "data/multi-project/jj/FAQ.md:11-20",
+                "data/multi-project/jj/github.md:152-171",
+                "data/multi-project/jj/FAQ.md:544-569",
+                "data/multi-project/jj/config.md:1758-1769",
+                "data/multi-project/jj/FAQ.md:345-384",
+                "data/multi-project/jj/tutorial.md:490-523",
+                "data/multi-project/jj/releasing.md:4-51"
+              ]
+            }
+          },
+          "latency_ms": [
+            8.139,
+            7.988,
+            8.457,
+            8.093,
+            7.969
+          ]
+        },
+        {
+          "id": "podman-detached-run",
+          "question": "How do I run a container in the background (detached) with podman?",
+          "answerable": true,
+          "gold": [
+            {
+              "source": "podman",
+              "path": "tutorials/podman_tutorial.md",
+              "must_contain": "podman run --name basic_httpd -d"
+            }
+          ],
+          "notes": "How-to. Podman uses -d/--detach for detached mode. Multi-project only (no podman in the single-project corpus).",
+          "by_k": {
+            "1": {
+              "answerable": true,
+              "hits_returned": 1,
+              "no_hit": null,
+              "hit": 0,
+              "recall": 0.0,
+              "precision": 0.0,
+              "mrr": 0.0,
+              "purity": 1.0,
+              "hits": [
+                "data/multi-project/podman/source/markdown/podman-container-checkpoint.1.md:7-9"
+              ]
+            },
+            "3": {
+              "answerable": true,
+              "hits_returned": 3,
+              "no_hit": null,
+              "hit": 0,
+              "recall": 0.0,
+              "precision": 0.0,
+              "mrr": 0.0,
+              "purity": 1.0,
+              "hits": [
+                "data/multi-project/podman/source/markdown/podman-container-checkpoint.1.md:7-9",
+                "data/multi-project/podman/source/markdown/podman-container.1.md:1-3",
+                "data/multi-project/podman/source/markdown/podman-container-exists.1.md:7-9"
+              ]
+            },
+            "5": {
+              "answerable": true,
+              "hits_returned": 5,
+              "no_hit": null,
+              "hit": 0,
+              "recall": 0.0,
+              "precision": 0.0,
+              "mrr": 0.0,
+              "purity": 1.0,
+              "hits": [
+                "data/multi-project/podman/source/markdown/podman-container-checkpoint.1.md:7-9",
+                "data/multi-project/podman/source/markdown/podman-container.1.md:1-3",
+                "data/multi-project/podman/source/markdown/podman-container-exists.1.md:7-9",
+                "data/multi-project/podman/source/markdown/podman-container-checkpoint.1.md:1-3",
+                "data/multi-project/podman/source/markdown/podman-container-cleanup.1.md:7-9"
+              ]
+            },
+            "7": {
+              "answerable": true,
+              "hits_returned": 7,
+              "no_hit": null,
+              "hit": 0,
+              "recall": 0.0,
+              "precision": 0.0,
+              "mrr": 0.0,
+              "purity": 1.0,
+              "hits": [
+                "data/multi-project/podman/source/markdown/podman-container-checkpoint.1.md:7-9",
+                "data/multi-project/podman/source/markdown/podman-container.1.md:1-3",
+                "data/multi-project/podman/source/markdown/podman-container-exists.1.md:7-9",
+                "data/multi-project/podman/source/markdown/podman-container-checkpoint.1.md:1-3",
+                "data/multi-project/podman/source/markdown/podman-container-cleanup.1.md:7-9",
+                "data/multi-project/podman/source/markdown/podman-container-cleanup.1.md:1-3",
+                "data/multi-project/podman/source/markdown/podman-container-checkpoint.1.md:4-6"
+              ]
+            },
+            "10": {
+              "answerable": true,
+              "hits_returned": 10,
+              "no_hit": null,
+              "hit": 0,
+              "recall": 0.0,
+              "precision": 0.0,
+              "mrr": 0.0,
+              "purity": 1.0,
+              "hits": [
+                "data/multi-project/podman/source/markdown/podman-container-checkpoint.1.md:7-9",
+                "data/multi-project/podman/source/markdown/podman-container.1.md:1-3",
+                "data/multi-project/podman/source/markdown/podman-container-exists.1.md:7-9",
+                "data/multi-project/podman/source/markdown/podman-container-checkpoint.1.md:1-3",
+                "data/multi-project/podman/source/markdown/podman-container-cleanup.1.md:7-9",
+                "data/multi-project/podman/source/markdown/podman-container-cleanup.1.md:1-3",
+                "data/multi-project/podman/source/markdown/podman-container-checkpoint.1.md:4-6",
+                "data/multi-project/podman/source/markdown/podman-container.1.md:7-9",
+                "data/multi-project/podman/source/markdown/podman-container-exists.1.md:1-3",
+                "data/multi-project/podman/source/markdown/podman-generate-systemd.1.md:7-9"
+              ]
+            },
+            "20": {
+              "answerable": true,
+              "hits_returned": 20,
+              "no_hit": null,
+              "hit": 0,
+              "recall": 0.0,
+              "precision": 0.0,
+              "mrr": 0.0,
+              "purity": 1.0,
+              "hits": [
+                "data/multi-project/podman/source/markdown/podman-container-checkpoint.1.md:7-9",
+                "data/multi-project/podman/source/markdown/podman-container.1.md:1-3",
+                "data/multi-project/podman/source/markdown/podman-container-exists.1.md:7-9",
+                "data/multi-project/podman/source/markdown/podman-container-checkpoint.1.md:1-3",
+                "data/multi-project/podman/source/markdown/podman-container-cleanup.1.md:7-9",
+                "data/multi-project/podman/source/markdown/podman-container-cleanup.1.md:1-3",
+                "data/multi-project/podman/source/markdown/podman-container-checkpoint.1.md:4-6",
+                "data/multi-project/podman/source/markdown/podman-container.1.md:7-9",
+                "data/multi-project/podman/source/markdown/podman-container-exists.1.md:1-3",
+                "data/multi-project/podman/source/markdown/podman-generate-systemd.1.md:7-9",
+                "data/multi-project/podman/source/markdown/podman-generate-spec.1.md:7-9",
+                "data/multi-project/podman/source/markdown/podman-container-restore.1.md:7-9",
+                "data/multi-project/podman/source/markdown/podman-container.1.md:4-6",
+                "data/multi-project/podman/source/markdown/podman-remote.1.md:162-179",
+                "data/multi-project/podman/source/markdown/podman-commit.1.md:7-11",
+                "data/multi-project/podman/source/markdown/podman-export.1.md:7-11",
+                "data/multi-project/podman/source/markdown/podman-healthcheck-run.1.md:4-6",
+                "data/multi-project/podman/source/markdown/podman-container-restore.1.md:1-3",
+                "data/multi-project/podman/source/markdown/podman-remote.1.md:7-9",
+                "data/multi-project/podman/source/markdown/podman-remote.1.md:179-185"
+              ]
+            }
+          },
+          "latency_ms": [
+            8.031,
+            8.178,
+            8.123,
+            7.956,
+            8.042
+          ]
+        },
+        {
+          "id": "qdrant-docker-ports",
+          "question": "Which host ports does the Qdrant Docker container publish for its REST and gRPC APIs?",
+          "answerable": true,
+          "gold": [
+            {
+              "source": "qdrant",
+              "path": "quickstart.md",
+              "must_contain": "docker run -p 6333:6333 -p 6334:6334"
+            }
+          ],
+          "notes": "Setup / reference. REST is 6333 and gRPC is 6334. Multi-project only.",
+          "by_k": {
+            "1": {
+              "answerable": true,
+              "hits_returned": 1,
+              "no_hit": null,
+              "hit": 0,
+              "recall": 0.0,
+              "precision": 0.0,
+              "mrr": 0.0,
+              "purity": 1.0,
+              "hits": [
+                "data/multi-project/qdrant/interfaces.md:38-59"
+              ]
+            },
+            "3": {
+              "answerable": true,
+              "hits_returned": 3,
+              "no_hit": null,
+              "hit": 0,
+              "recall": 0.0,
+              "precision": 0.0,
+              "mrr": 0.0,
+              "purity": 1.0,
+              "hits": [
+                "data/multi-project/qdrant/interfaces.md:38-59",
+                "data/multi-project/qdrant/cloud-api.md:1-10",
+                "data/multi-project/qdrant/cloud-api.md:15-26"
+              ]
+            },
+            "5": {
+              "answerable": true,
+              "hits_returned": 5,
+              "no_hit": null,
+              "hit": 0,
+              "recall": 0.0,
+              "precision": 0.0,
+              "mrr": 0.0,
+              "purity": 1.0,
+              "hits": [
+                "data/multi-project/qdrant/interfaces.md:38-59",
+                "data/multi-project/qdrant/cloud-api.md:1-10",
+                "data/multi-project/qdrant/cloud-api.md:15-26",
+                "data/multi-project/qdrant/installation.md:49-61",
+                "data/multi-project/qdrant/hybrid-cloud/hybrid-cloud-cluster-creation.md:115-161"
+              ]
+            },
+            "7": {
+              "answerable": true,
+              "hits_returned": 7,
+              "no_hit": null,
+              "hit": 0,
+              "recall": 0.0,
+              "precision": 0.0,
+              "mrr": 0.0,
+              "purity": 1.0,
+              "hits": [
+                "data/multi-project/qdrant/interfaces.md:38-59",
+                "data/multi-project/qdrant/cloud-api.md:1-10",
+                "data/multi-project/qdrant/cloud-api.md:15-26",
+                "data/multi-project/qdrant/installation.md:49-61",
+                "data/multi-project/qdrant/hybrid-cloud/hybrid-cloud-cluster-creation.md:115-161",
+                "data/multi-project/qdrant/scaling/distributed_deployment.md:76-118",
+                "data/multi-project/qdrant/tutorials-operations/secure-qdrant.md:37-76"
+              ]
+            },
+            "10": {
+              "answerable": true,
+              "hits_returned": 10,
+              "no_hit": null,
+              "hit": 1,
+              "recall": 1.0,
+              "precision": 0.1,
+              "mrr": 0.125,
+              "purity": 1.0,
+              "hits": [
+                "data/multi-project/qdrant/interfaces.md:38-59",
+                "data/multi-project/qdrant/cloud-api.md:1-10",
+                "data/multi-project/qdrant/cloud-api.md:15-26",
+                "data/multi-project/qdrant/installation.md:49-61",
+                "data/multi-project/qdrant/hybrid-cloud/hybrid-cloud-cluster-creation.md:115-161",
+                "data/multi-project/qdrant/scaling/distributed_deployment.md:76-118",
+                "data/multi-project/qdrant/tutorials-operations/secure-qdrant.md:37-76",
+                "data/multi-project/qdrant/quickstart.md:19-43",
+                "data/multi-project/qdrant/cloud-api.md:11-14",
+                "data/multi-project/qdrant/platforms/privategpt.md:15-41"
+              ]
+            },
+            "20": {
+              "answerable": true,
+              "hits_returned": 20,
+              "no_hit": null,
+              "hit": 1,
+              "recall": 1.0,
+              "precision": 0.05,
+              "mrr": 0.125,
+              "purity": 0.95,
+              "hits": [
+                "data/multi-project/qdrant/interfaces.md:38-59",
+                "data/multi-project/qdrant/cloud-api.md:1-10",
+                "data/multi-project/qdrant/cloud-api.md:15-26",
+                "data/multi-project/qdrant/installation.md:49-61",
+                "data/multi-project/qdrant/hybrid-cloud/hybrid-cloud-cluster-creation.md:115-161",
+                "data/multi-project/qdrant/scaling/distributed_deployment.md:76-118",
+                "data/multi-project/qdrant/tutorials-operations/secure-qdrant.md:37-76",
+                "data/multi-project/qdrant/quickstart.md:19-43",
+                "data/multi-project/qdrant/cloud-api.md:11-14",
+                "data/multi-project/qdrant/platforms/privategpt.md:15-41",
+                "data/multi-project/qdrant/cloud/cluster-access.md:23-30",
+                "data/multi-project/qdrant/tutorials-operations/secure-qdrant.md:1-11",
+                "data/multi-project/qdrant/frameworks/langchain.md:85-101",
+                "data/multi-project/podman/source/markdown/options/publish.md:7-8",
+                "data/multi-project/qdrant/cloud-api.md:27-31",
+                "data/multi-project/qdrant/migrate-to-qdrant/from-qdrant.md:75-83",
+                "data/multi-project/qdrant/interfaces.md:1-9",
+                "data/multi-project/qdrant/cloud-api.md:48-51",
+                "data/multi-project/qdrant/overview/_index.md:36-39",
+                "data/multi-project/qdrant/quickstart.md:44-92"
+              ]
+            }
+          },
+          "latency_ms": [
+            8.931,
+            8.835,
+            8.775,
+            8.84,
+            8.768
+          ]
+        },
+        {
+          "id": "cross-project-config",
+          "question": "How do I set a configuration value in the CLI?",
+          "answerable": true,
+          "gold": [
+            {
+              "source": "jj",
+              "path": "config.md",
+              "must_contain": "jj config set"
+            },
+            {
+              "source": "podman",
+              "path": "source/markdown/podman.1.md",
+              "must_contain": "--config"
+            }
+          ],
+          "notes": "Cross-project ambiguity: 'config' is a term common to several projects, so this measures cross-corpus competition and source purity.",
+          "by_k": {
+            "1": {
+              "answerable": true,
+              "hits_returned": 1,
+              "no_hit": null,
+              "hit": 0,
+              "recall": 0.0,
+              "precision": 0.0,
+              "mrr": 0.0,
+              "purity": 1.0,
+              "hits": [
+                "data/multi-project/podman/source/markdown/podman.1.md:266-269"
+              ]
+            },
+            "3": {
+              "answerable": true,
+              "hits_returned": 3,
+              "no_hit": null,
+              "hit": 0,
+              "recall": 0.0,
+              "precision": 0.0,
+              "mrr": 0.0,
+              "purity": 1.0,
+              "hits": [
+                "data/multi-project/podman/source/markdown/podman-remote.1.md:97-100",
+                "data/multi-project/podman/source/markdown/podman.1.md:266-269",
+                "data/multi-project/podman/source/markdown/options/configmap.md:7-8"
+              ]
+            },
+            "5": {
+              "answerable": true,
+              "hits_returned": 5,
+              "no_hit": null,
+              "hit": 0,
+              "recall": 0.0,
+              "precision": 0.0,
+              "mrr": 0.0,
+              "purity": 1.0,
+              "hits": [
+                "data/multi-project/podman/source/markdown/podman.1.md:266-269",
+                "data/multi-project/podman/source/markdown/podman-remote.1.md:97-100",
+                "data/multi-project/podman/source/markdown/options/configmap.md:7-8",
+                "data/multi-project/podman/source/markdown/options/entrypoint.md:7-8",
+                "data/multi-project/podman/source/markdown/options/env.md:7-8"
+              ]
+            },
+            "7": {
+              "answerable": true,
+              "hits_returned": 7,
+              "no_hit": null,
+              "hit": 0,
+              "recall": 0.0,
+              "precision": 0.0,
+              "mrr": 0.0,
+              "purity": 1.0,
+              "hits": [
+                "data/multi-project/podman/source/markdown/podman-remote.1.md:97-100",
+                "data/multi-project/podman/source/markdown/podman.1.md:266-269",
+                "data/multi-project/podman/source/markdown/options/configmap.md:7-8",
+                "data/multi-project/podman/source/markdown/options/entrypoint.md:7-8",
+                "data/multi-project/podman/source/markdown/options/env.md:7-8",
+                "data/multi-project/podman/source/markdown/options/volume.md:7-8",
+                "data/multi-project/podman/source/markdown/options/env.md:9-14"
+              ]
+            },
+            "10": {
+              "answerable": true,
+              "hits_returned": 10,
+              "no_hit": null,
+              "hit": 0,
+              "recall": 0.0,
+              "precision": 0.0,
+              "mrr": 0.0,
+              "purity": 0.9,
+              "hits": [
+                "data/multi-project/podman/source/markdown/podman.1.md:266-269",
+                "data/multi-project/podman/source/markdown/podman-remote.1.md:97-100",
+                "data/multi-project/podman/source/markdown/options/configmap.md:7-8",
+                "data/multi-project/podman/source/markdown/options/entrypoint.md:7-8",
+                "data/multi-project/podman/source/markdown/options/env.md:7-8",
+                "data/multi-project/podman/source/markdown/options/volume.md:7-8",
+                "data/multi-project/podman/source/markdown/options/env.md:9-14",
+                "data/multi-project/podman/source/markdown/podman.1.md:270-273",
+                "data/multi-project/podman/source/markdown/options/volume.image.md:7-8",
+                "data/multi-project/qdrant/headless/snippets/set-payload/by-point-id/generated/python.md:1-11"
+              ]
+            },
+            "20": {
+              "answerable": true,
+              "hits_returned": 20,
+              "no_hit": null,
+              "hit": 0,
+              "recall": 0.0,
+              "precision": 0.0,
+              "mrr": 0.0,
+              "purity": 0.9,
+              "hits": [
+                "data/multi-project/podman/source/markdown/podman-remote.1.md:97-100",
+                "data/multi-project/podman/source/markdown/podman.1.md:266-269",
+                "data/multi-project/podman/source/markdown/options/configmap.md:7-8",
+                "data/multi-project/podman/source/markdown/options/entrypoint.md:7-8",
+                "data/multi-project/podman/source/markdown/options/env.md:7-8",
+                "data/multi-project/podman/source/markdown/options/volume.md:7-8",
+                "data/multi-project/podman/source/markdown/options/env.md:9-14",
+                "data/multi-project/podman/source/markdown/podman.1.md:270-273",
+                "data/multi-project/podman/source/markdown/options/volume.image.md:7-8",
+                "data/multi-project/qdrant/headless/snippets/set-payload/by-point-id/generated/python.md:1-11",
+                "data/multi-project/podman/source/markdown/options/env.image.md:7-8",
+                "data/multi-project/podman/source/markdown/options/name.container.md:7-8",
+                "data/multi-project/podman/source/markdown/podman.1.md:274-277",
+                "data/multi-project/podman/source/markdown/options/log-opt.md:7-8",
+                "data/multi-project/podman/source/markdown/options/gidmap.container.md:7-8",
+                "data/multi-project/podman/source/markdown/podman-remote.1.md:101-104",
+                "data/multi-project/podman/source/markdown/options/sysctl.md:7-8",
+                "data/multi-project/podman/source/markdown/options/arch.md:7-8",
+                "data/multi-project/podman/source/markdown/options/target.md:7-8",
+                "data/multi-project/qdrant/ops-configuration/configuration.md:71-96"
+              ]
+            }
+          },
+          "latency_ms": [
+            7.569,
+            7.919,
+            7.854,
+            7.875,
+            7.821
+          ]
+        },
+        {
+          "id": "unanswerable-geography",
+          "question": "What is the tallest mountain in South America?",
+          "answerable": false,
+          "gold": [],
+          "notes": "Negative / unanswerable control: nothing in the corpus is relevant. Its best-scoring chunk is ~0.46, below THRESHOLD (0.5), so no hit is returned at any k. Metrics report the no-hit rate instead of recall.",
+          "by_k": {
+            "1": {
+              "answerable": false,
+              "hits_returned": 0,
+              "no_hit": 1,
+              "hit": null,
+              "recall": null,
+              "precision": null,
+              "mrr": null,
+              "purity": null,
+              "hits": []
+            },
+            "3": {
+              "answerable": false,
+              "hits_returned": 0,
+              "no_hit": 1,
+              "hit": null,
+              "recall": null,
+              "precision": null,
+              "mrr": null,
+              "purity": null,
+              "hits": []
+            },
+            "5": {
+              "answerable": false,
+              "hits_returned": 0,
+              "no_hit": 1,
+              "hit": null,
+              "recall": null,
+              "precision": null,
+              "mrr": null,
+              "purity": null,
+              "hits": []
+            },
+            "7": {
+              "answerable": false,
+              "hits_returned": 0,
+              "no_hit": 1,
+              "hit": null,
+              "recall": null,
+              "precision": null,
+              "mrr": null,
+              "purity": null,
+              "hits": []
+            },
+            "10": {
+              "answerable": false,
+              "hits_returned": 0,
+              "no_hit": 1,
+              "hit": null,
+              "recall": null,
+              "precision": null,
+              "mrr": null,
+              "purity": null,
+              "hits": []
+            },
+            "20": {
+              "answerable": false,
+              "hits_returned": 0,
+              "no_hit": 1,
+              "hit": null,
+              "recall": null,
+              "precision": null,
+              "mrr": null,
+              "purity": null,
+              "hits": []
+            }
+          },
+          "latency_ms": [
+            6.638,
+            7.624,
+            7.788,
+            6.623,
+            8.036
+          ]
+        }
+      ],
+      "collection": "eval-multi-project-bge-small-en-v1-5-a3ea89d89f3c"
+    },
+    "single-project": {
+      "prefix": "eval-single-project",
+      "data_root": "data/single-project",
+      "source_names": [
+        "jj"
+      ],
+      "latency": {
+        "warmup": 3,
+        "reps": 5,
+        "latency_k": 7,
+        "samples_ms": [
+          6.799,
+          6.601,
+          6.591,
+          6.302,
+          6.661,
+          7.57,
+          7.709,
+          7.676,
+          7.754,
+          7.731,
+          7.61,
+          7.562,
+          8.003,
+          7.606,
+          7.676
+        ],
+        "p50_ms": 7.606,
+        "p95_ms": 7.8286999999999995
+      },
+      "questions": [
+        {
+          "id": "jj-author",
+          "question": "Who is the author of jj?",
+          "answerable": true,
+          "gold": [
+            {
+              "source": "jj",
+              "path": "testimonials.md",
+              "must_contain": "project creator and leader"
+            }
+          ],
+          "notes": "The answer is worded 'project creator and leader'; the word 'author' appears only in unrelated design-doc metadata, so this measures paraphrase robustness.",
+          "by_k": {
+            "1": {
+              "answerable": true,
+              "hits_returned": 1,
+              "no_hit": null,
+              "hit": 0,
+              "recall": 0.0,
+              "precision": 0.0,
+              "mrr": 0.0,
+              "purity": 1.0,
+              "hits": [
+                "data/single-project/jj/design/secure-config.md:2-5"
+              ]
+            },
+            "3": {
+              "answerable": true,
+              "hits_returned": 3,
+              "no_hit": null,
+              "hit": 0,
+              "recall": 0.0,
+              "precision": 0.0,
+              "mrr": 0.0,
+              "purity": 1.0,
+              "hits": [
+                "data/single-project/jj/design/secure-config.md:2-5",
+                "data/single-project/jj/design/managed-config.md:2-7",
+                "data/single-project/jj/community_tools.md:130-137"
+              ]
+            },
+            "5": {
+              "answerable": true,
+              "hits_returned": 5,
+              "no_hit": null,
+              "hit": 0,
+              "recall": 0.0,
+              "precision": 0.0,
+              "mrr": 0.0,
+              "purity": 1.0,
+              "hits": [
+                "data/single-project/jj/design/secure-config.md:2-5",
+                "data/single-project/jj/design/managed-config.md:2-7",
+                "data/single-project/jj/community_tools.md:130-137",
+                "data/single-project/jj/community_tools.md:124-129",
+                "data/single-project/jj/index.md:24-33"
+              ]
+            },
+            "7": {
+              "answerable": true,
+              "hits_returned": 7,
+              "no_hit": null,
+              "hit": 0,
+              "recall": 0.0,
+              "precision": 0.0,
+              "mrr": 0.0,
+              "purity": 1.0,
+              "hits": [
+                "data/single-project/jj/design/secure-config.md:2-5",
+                "data/single-project/jj/design/managed-config.md:2-7",
+                "data/single-project/jj/community_tools.md:130-137",
+                "data/single-project/jj/community_tools.md:124-129",
+                "data/single-project/jj/index.md:24-33",
+                "data/single-project/jj/contributing.md:562-607",
+                "data/single-project/jj/design/run.md:2-13"
+              ]
+            },
+            "10": {
+              "answerable": true,
+              "hits_returned": 10,
+              "no_hit": null,
+              "hit": 0,
+              "recall": 0.0,
+              "precision": 0.0,
+              "mrr": 0.0,
+              "purity": 1.0,
+              "hits": [
+                "data/single-project/jj/design/secure-config.md:2-5",
+                "data/single-project/jj/design/managed-config.md:2-7",
+                "data/single-project/jj/community_tools.md:130-137",
+                "data/single-project/jj/community_tools.md:124-129",
+                "data/single-project/jj/index.md:24-33",
+                "data/single-project/jj/contributing.md:562-607",
+                "data/single-project/jj/design/run.md:2-13",
+                "data/single-project/jj/design/jj-converge-command.md:2-12",
+                "data/single-project/jj/windows.md:108-116",
+                "data/single-project/jj/governance/temporary-voting.md:14-24"
+              ]
+            },
+            "20": {
+              "answerable": true,
+              "hits_returned": 20,
+              "no_hit": null,
+              "hit": 0,
+              "recall": 0.0,
+              "precision": 0.0,
+              "mrr": 0.0,
+              "purity": 1.0,
+              "hits": [
+                "data/single-project/jj/design/secure-config.md:2-5",
+                "data/single-project/jj/design/managed-config.md:2-7",
+                "data/single-project/jj/community_tools.md:130-137",
+                "data/single-project/jj/community_tools.md:124-129",
+                "data/single-project/jj/index.md:24-33",
+                "data/single-project/jj/contributing.md:562-607",
+                "data/single-project/jj/design/run.md:2-13",
+                "data/single-project/jj/design/jj-converge-command.md:2-12",
+                "data/single-project/jj/windows.md:108-116",
+                "data/single-project/jj/governance/temporary-voting.md:14-24",
+                "data/single-project/jj/community_tools.md:49-56",
+                "data/single-project/jj/style_guide.md:155-204",
+                "data/single-project/jj/install-and-setup.md:67-86",
+                "data/single-project/jj/gerrit.md:2-14",
+                "data/single-project/jj/design/run.md:152-157",
+                "data/single-project/jj/contributing.md:480-487",
+                "data/single-project/jj/install-and-setup.md:235-239",
+                "data/single-project/jj/design/run.md:47-59",
+                "data/single-project/jj/tutorial.md:428-455",
+                "data/single-project/jj/index.md:8-23"
+              ]
+            }
+          },
+          "latency_ms": [
+            6.799,
+            6.601,
+            6.591,
+            6.302,
+            6.661
+          ]
+        },
+        {
+          "id": "jj-config-set-user",
+          "question": "How do I set a configuration value for my user with jj?",
+          "answerable": true,
+          "gold": [
+            {
+              "source": "jj",
+              "path": "config.md",
+              "must_contain": "jj config set --user"
+            }
+          ],
+          "notes": "How-to / procedural. The command form is `jj config set --user <key> <value>`.",
+          "by_k": {
+            "1": {
+              "answerable": true,
+              "hits_returned": 1,
+              "no_hit": null,
+              "hit": 0,
+              "recall": 0.0,
+              "precision": 0.0,
+              "mrr": 0.0,
+              "purity": 1.0,
+              "hits": [
+                "data/single-project/jj/config.md:2437-2457"
+              ]
+            },
+            "3": {
+              "answerable": true,
+              "hits_returned": 3,
+              "no_hit": null,
+              "hit": 0,
+              "recall": 0.0,
+              "precision": 0.0,
+              "mrr": 0.0,
+              "purity": 1.0,
+              "hits": [
+                "data/single-project/jj/config.md:2437-2457",
+                "data/single-project/jj/install-and-setup.md:222-230",
+                "data/single-project/jj/config.md:2332-2374"
+              ]
+            },
+            "5": {
+              "answerable": true,
+              "hits_returned": 5,
+              "no_hit": null,
+              "hit": 0,
+              "recall": 0.0,
+              "precision": 0.0,
+              "mrr": 0.0,
+              "purity": 1.0,
+              "hits": [
+                "data/single-project/jj/config.md:2437-2457",
+                "data/single-project/jj/install-and-setup.md:222-230",
+                "data/single-project/jj/config.md:2332-2374",
+                "data/single-project/jj/design/secure-config.md:2-5",
+                "data/single-project/jj/config.md:132-155"
+              ]
+            },
+            "7": {
+              "answerable": true,
+              "hits_returned": 7,
+              "no_hit": null,
+              "hit": 0,
+              "recall": 0.0,
+              "precision": 0.0,
+              "mrr": 0.0,
+              "purity": 1.0,
+              "hits": [
+                "data/single-project/jj/config.md:2437-2457",
+                "data/single-project/jj/install-and-setup.md:222-230",
+                "data/single-project/jj/config.md:2332-2374",
+                "data/single-project/jj/design/secure-config.md:2-5",
+                "data/single-project/jj/config.md:132-155",
+                "data/single-project/jj/config.md:2486-2489",
+                "data/single-project/jj/config.md:6-53"
+              ]
+            },
+            "10": {
+              "answerable": true,
+              "hits_returned": 10,
+              "no_hit": null,
+              "hit": 0,
+              "recall": 0.0,
+              "precision": 0.0,
+              "mrr": 0.0,
+              "purity": 1.0,
+              "hits": [
+                "data/single-project/jj/config.md:2437-2457",
+                "data/single-project/jj/install-and-setup.md:222-230",
+                "data/single-project/jj/config.md:2332-2374",
+                "data/single-project/jj/design/secure-config.md:2-5",
+                "data/single-project/jj/config.md:132-155",
+                "data/single-project/jj/config.md:2486-2489",
+                "data/single-project/jj/config.md:6-53",
+                "data/single-project/jj/design/managed-config.md:251-255",
+                "data/single-project/jj/config.md:2374-2387",
+                "data/single-project/jj/config.md:2388-2401"
+              ]
+            },
+            "20": {
+              "answerable": true,
+              "hits_returned": 20,
+              "no_hit": null,
+              "hit": 0,
+              "recall": 0.0,
+              "precision": 0.0,
+              "mrr": 0.0,
+              "purity": 1.0,
+              "hits": [
+                "data/single-project/jj/config.md:2437-2457",
+                "data/single-project/jj/install-and-setup.md:222-230",
+                "data/single-project/jj/config.md:2332-2374",
+                "data/single-project/jj/design/secure-config.md:2-5",
+                "data/single-project/jj/config.md:132-155",
+                "data/single-project/jj/config.md:2486-2489",
+                "data/single-project/jj/config.md:6-53",
+                "data/single-project/jj/design/managed-config.md:251-255",
+                "data/single-project/jj/config.md:2374-2387",
+                "data/single-project/jj/config.md:2388-2401",
+                "data/single-project/jj/design/managed-config.md:2-7",
+                "data/single-project/jj/config.md:2458-2485",
+                "data/single-project/jj/design/managed-config.md:120-123",
+                "data/single-project/jj/design/managed-config.md:150-172",
+                "data/single-project/jj/design/managed-config.md:173-179",
+                "data/single-project/jj/config.md:244-254",
+                "data/single-project/jj/config.md:1502-1510",
+                "data/single-project/jj/config.md:2-5",
+                "data/single-project/jj/design/managed-config.md:124-127",
+                "data/single-project/jj/design/secure-config.md:6-29"
+              ]
+            }
+          },
+          "latency_ms": [
+            7.57,
+            7.709,
+            7.676,
+            7.754,
+            7.731
+          ]
+        },
+        {
+          "id": "jj-new-change",
+          "question": "How do I start a new change (commit) in jj?",
+          "answerable": true,
+          "gold": [
+            {
+              "source": "jj",
+              "path": "tutorial.md",
+              "must_contain": "That is what `jj new` is for"
+            }
+          ],
+          "notes": "API / reference. `jj new` creates a new commit on top of the current working-copy commit.",
+          "by_k": {
+            "1": {
+              "answerable": true,
+              "hits_returned": 1,
+              "no_hit": null,
+              "hit": 1,
+              "recall": 1.0,
+              "precision": 1.0,
+              "mrr": 1.0,
+              "purity": 1.0,
+              "hits": [
+                "data/single-project/jj/tutorial.md:137-174"
+              ]
+            },
+            "3": {
+              "answerable": true,
+              "hits_returned": 3,
+              "no_hit": null,
+              "hit": 1,
+              "recall": 1.0,
+              "precision": 0.3333333333333333,
+              "mrr": 1.0,
+              "purity": 1.0,
+              "hits": [
+                "data/single-project/jj/tutorial.md:137-174",
+                "data/single-project/jj/tutorial.md:86-137",
+                "data/single-project/jj/FAQ.md:473-478"
+              ]
+            },
+            "5": {
+              "answerable": true,
+              "hits_returned": 5,
+              "no_hit": null,
+              "hit": 1,
+              "recall": 1.0,
+              "precision": 0.2,
+              "mrr": 1.0,
+              "purity": 1.0,
+              "hits": [
+                "data/single-project/jj/tutorial.md:137-174",
+                "data/single-project/jj/tutorial.md:86-137",
+                "data/single-project/jj/FAQ.md:473-478",
+                "data/single-project/jj/FAQ.md:327-344",
+                "data/single-project/jj/config.md:2234-2251"
+              ]
+            },
+            "7": {
+              "answerable": true,
+              "hits_returned": 7,
+              "no_hit": null,
+              "hit": 1,
+              "recall": 1.0,
+              "precision": 0.14285714285714285,
+              "mrr": 1.0,
+              "purity": 1.0,
+              "hits": [
+                "data/single-project/jj/tutorial.md:137-174",
+                "data/single-project/jj/tutorial.md:86-137",
+                "data/single-project/jj/FAQ.md:473-478",
+                "data/single-project/jj/FAQ.md:327-344",
+                "data/single-project/jj/config.md:2234-2251",
+                "data/single-project/jj/FAQ.md:512-525",
+                "data/single-project/jj/FAQ.md:284-326"
+              ]
+            },
+            "10": {
+              "answerable": true,
+              "hits_returned": 10,
+              "no_hit": null,
+              "hit": 1,
+              "recall": 1.0,
+              "precision": 0.1,
+              "mrr": 1.0,
+              "purity": 1.0,
+              "hits": [
+                "data/single-project/jj/tutorial.md:137-174",
+                "data/single-project/jj/tutorial.md:86-137",
+                "data/single-project/jj/FAQ.md:473-478",
+                "data/single-project/jj/FAQ.md:327-344",
+                "data/single-project/jj/config.md:2234-2251",
+                "data/single-project/jj/FAQ.md:512-525",
+                "data/single-project/jj/FAQ.md:284-326",
+                "data/single-project/jj/config.md:306-330",
+                "data/single-project/jj/tutorial.md:456-490",
+                "data/single-project/jj/tutorial.md:523-573"
+              ]
+            },
+            "20": {
+              "answerable": true,
+              "hits_returned": 20,
+              "no_hit": null,
+              "hit": 1,
+              "recall": 1.0,
+              "precision": 0.05,
+              "mrr": 1.0,
+              "purity": 1.0,
+              "hits": [
+                "data/single-project/jj/tutorial.md:137-174",
+                "data/single-project/jj/tutorial.md:86-137",
+                "data/single-project/jj/FAQ.md:473-478",
+                "data/single-project/jj/FAQ.md:327-344",
+                "data/single-project/jj/config.md:2234-2251",
+                "data/single-project/jj/FAQ.md:512-525",
+                "data/single-project/jj/FAQ.md:284-326",
+                "data/single-project/jj/config.md:306-330",
+                "data/single-project/jj/tutorial.md:456-490",
+                "data/single-project/jj/tutorial.md:523-573",
+                "data/single-project/jj/github.md:111-151",
+                "data/single-project/jj/FAQ.md:152-175",
+                "data/single-project/jj/tutorial.md:573-577",
+                "data/single-project/jj/FAQ.md:11-20",
+                "data/single-project/jj/github.md:152-171",
+                "data/single-project/jj/FAQ.md:544-569",
+                "data/single-project/jj/config.md:1758-1769",
+                "data/single-project/jj/FAQ.md:345-384",
+                "data/single-project/jj/tutorial.md:490-523",
+                "data/single-project/jj/releasing.md:4-51"
+              ]
+            }
+          },
+          "latency_ms": [
+            7.61,
+            7.562,
+            8.003,
+            7.606,
+            7.676
+          ]
+        }
+      ],
+      "collection": "eval-single-project-bge-small-en-v1-5-f017d3d86bc1"
+    }
+  },
+  "degradation": {
+    "single-project->multi-project": {
+      "from": "single-project",
+      "to": "multi-project",
+      "questions_compared": [
+        "jj-author",
+        "jj-config-set-user",
+        "jj-new-change"
+      ],
+      "recall@1": 0.0,
+      "recall@3": 0.0,
+      "recall@5": 0.0,
+      "recall@7": 0.0,
+      "recall@10": 0.0,
+      "recall@20": 0.0,
+      "purity@7": 0.0,
+      "p95_ms": 1.0298999999999996
+    }
+  },
+  "summary": {
+    "multi-project": {
+      "questions_applied": 7,
+      "answerable": 6,
+      "unanswerable": 1,
+      "mean_recall": {
+        "recall@1": 0.16666666666666666,
+        "recall@3": 0.16666666666666666,
+        "recall@5": 0.16666666666666666,
+        "recall@7": 0.16666666666666666,
+        "recall@10": 0.3333333333333333,
+        "recall@20": 0.3333333333333333
+      },
+      "mean_purity@7": 1.0,
+      "mean_mrr@7": 0.16666666666666666,
+      "unanswerable_no_hit_rate": 1.0,
+      "latency": {
+        "p50_ms": 7.956,
+        "p95_ms": 8.8586
+      }
+    },
+    "single-project": {
+      "questions_applied": 3,
+      "answerable": 3,
+      "unanswerable": 0,
+      "mean_recall": {
+        "recall@1": 0.3333333333333333,
+        "recall@3": 0.3333333333333333,
+        "recall@5": 0.3333333333333333,
+        "recall@7": 0.3333333333333333,
+        "recall@10": 0.3333333333333333,
+        "recall@20": 0.3333333333333333
+      },
+      "mean_purity@7": 1.0,
+      "mean_mrr@7": 0.3333333333333333,
+      "unanswerable_no_hit_rate": null,
+      "latency": {
+        "p50_ms": 7.606,
+        "p95_ms": 7.8286999999999995
+      }
+    }
+  }
+}

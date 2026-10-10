@@ -10,4 +10,4 @@ data_root = "data/multi-project"
 
 [collection]
 # Set by `rig-rag promote --config eval/profiles/multi-project/rig-rag.toml <collection>`.
-active = ""
+active = "eval-multi-project-bge-small-en-v1-5-a3ea89d89f3c"
