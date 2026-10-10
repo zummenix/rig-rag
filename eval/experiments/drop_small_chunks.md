@@ -110,10 +110,24 @@ remain reproducible.
 
 ## Reproduction
 
+The `MIN_CHUNK_TOKENS` change is reverted at HEAD, so `--experiment` alone no
+longer selects ingest behavior: each arm must be built from its pinned commit.
+The runner builds the checked-out tree and attributes the run to `HEAD`, so each
+`eval-run` below has to run with that commit checked out — both are reachable
+from pushed refs, as the provenance check requires.
+
 ```sh
-just eval-run --experiment baseline --force-ingest          # MIN_CHUNK_TOKENS = 0
-just eval-run --experiment drop_small_chunks --force-ingest # MIN_CHUNK_TOKENS = 15
-just eval-report drop_small_chunks                          # render from committed JSON
+# baseline arm (MIN_CHUNK_TOKENS = 0)
+git checkout 510d9915d25afdcee38c32e72cfbdcd2fc2d9126
+just eval-run --experiment baseline --force-ingest
+
+# treatment arm (MIN_CHUNK_TOKENS = 15)
+git checkout 25d1341b83e8a5ab0e1bc97948e5b4c8a0060512
+just eval-run --experiment drop_small_chunks --force-ingest
+
+# return to your branch, then render the experiment from the committed JSON
+git checkout <your-branch>
+just eval-report drop_small_chunks
 ```
 
 ## Embedded summary (JSON)
