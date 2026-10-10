@@ -61,5 +61,5 @@ def report_main(
     )
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(html, encoding="utf-8")
-    print(f"wrote {out_path} ({len(html)} bytes) from {results_path}")
+    print(f"wrote {out_path} ({len(html.encode('utf-8'))} bytes) from {results_path}")
     return 0
