@@ -87,7 +87,10 @@ pub async fn run(
 
     println!("Prepared embeddings count: {}", total_embeddings_count);
     println!("Ingested into {target}.");
-    println!("Promote with: rig-rag promote {target}");
+    println!(
+        "Promote with: rig-rag --config {} promote {target}",
+        config_path.as_ref().display()
+    );
     stats::report_memory();
     Ok(())
 }
