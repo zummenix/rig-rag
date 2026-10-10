@@ -16,7 +16,7 @@ pub struct Config {
     pub qdrant: QdrantConfig,
     pub embedding: EmbeddingConfig,
     pub collection: CollectionConfig,
-    /// Defaults for `rig-rag serve`; CLI flags override each field.
+    /// Defaults for the server; CLI flags override each field.
     pub server: Option<ServerConfig>,
 }
 
@@ -36,7 +36,7 @@ pub struct EmbeddingConfig {
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct CollectionConfig {
-    /// Name of the active collection. Empty until the first `promote`.
+    /// Name of the active collection. Empty until a collection is promoted.
     pub active: String,
 }
 

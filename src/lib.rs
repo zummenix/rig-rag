@@ -1,4 +1,3 @@
-pub mod chat;
 pub mod chunk;
 pub mod config;
 pub mod embedding;
@@ -8,7 +7,6 @@ pub mod ingest;
 pub mod model;
 pub mod promote;
 pub mod prune;
-pub mod query;
 pub mod retrieval;
 pub mod serve;
 pub mod sources;

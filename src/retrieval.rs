@@ -10,7 +10,7 @@ pub const THRESHOLD: f32 = 0.5;
 
 /// Retrieves the chunks most similar to `question`, most similar first.
 ///
-/// Shared by the `query` subcommand and the web server so both apply the same
+/// Backs the web server's retrieval and chat endpoints so both apply the same
 /// search semantics.
 pub async fn search(
     store: &QdrantVectorStore,
