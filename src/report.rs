@@ -30,9 +30,6 @@ pub struct IngestReport {
     pub collection: String,
     pub prefix: String,
     pub force: bool,
-    /// Minimum chunk-token count applied during this ingest; `0` keeps every
-    /// chunk. Recorded so the report states exactly what was filtered.
-    pub min_chunk_tokens: usize,
     pub model: ModelInfo,
     pub timing_ms: Timing,
     pub memory: Memory,
@@ -306,7 +303,6 @@ mod tests {
             collection: "eval-single-project-bge-small-en-v1-5-0123456789ab".to_string(),
             prefix: "eval-single-project".to_string(),
             force: false,
-            min_chunk_tokens: 0,
             model: ModelInfo {
                 slug: "bge-small-en-v1.5".to_string(),
                 dimensions: 384,
@@ -343,7 +339,6 @@ mod tests {
         let value: serde_json::Value = serde_json::to_value(&report).unwrap();
         assert_eq!(value["schema_version"], SCHEMA_VERSION);
         assert_eq!(value["status"], "reused");
-        assert_eq!(value["min_chunk_tokens"], 0);
         assert_eq!(value["model"]["dimensions"], 384);
         assert_eq!(value["sources_detail"][0]["ref"], "main");
         assert_eq!(
@@ -371,7 +366,6 @@ mod tests {
             collection: "docs-x".to_string(),
             prefix: "docs".to_string(),
             force: false,
-            min_chunk_tokens: 0,
             model: ModelInfo {
                 slug: "bge-small-en-v1.5".to_string(),
                 dimensions: 384,
