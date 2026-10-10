@@ -215,6 +215,18 @@ class RenderComparisonTest(unittest.TestCase):
         html = render_report(self.candidate_results, ingest=[self.candidate_ingest])
         self.assertNotIn('id="comparison"', html)
 
+    def test_ingest_only_candidate_uses_the_declared_commit(self):
+        html = render_report(
+            None,
+            ingest=[self.candidate_ingest],
+            baseline=self.baseline,
+            commit="deadbeef",
+            experiment="candidate",
+        )
+        self.assertIn('id="comparison"', html)
+        # Provenance and the comparison's candidate-commit cell must agree.
+        self.assertGreaterEqual(html.count("deadbeef"), 2)
+
     def test_comparison_is_self_contained(self):
         html = render_report(
             self.candidate_results,

@@ -605,6 +605,7 @@ def _comparison(
     baseline: compare.Baseline,
     k_values: tuple[int, ...],
     latency_k: int,
+    commit: str | None = None,
 ) -> str:
     profiles = compare.combined_profiles(candidate_results, tuple(candidate_ingest), baseline)
     if not profiles:
@@ -616,7 +617,9 @@ def _comparison(
     base_cost = {profile: compare.ingest_metrics(base_ingest.get(profile)) for profile in profiles}
 
     blocks: list[str] = []
-    candidate_commit = (candidate_results or {}).get("commit") or ""
+    # An ingest-only candidate declares its commit out of band; fall back to it so
+    # this table agrees with Provenance instead of showing an em dash.
+    candidate_commit = (candidate_results or {}).get("commit") or (commit or "")
     baseline_commit = (baseline.results or {}).get("commit") or ""
     blocks.append(
         layout.kv_table(
@@ -841,7 +844,9 @@ def render_report(
         _header(title, results, subtitle),
         _provenance(results, k_values, latency_k, ingest_docs, commit),
         _notes(notes) if notes else "",
-        _comparison(results, ingest_docs, baseline, k_values, latency_k) if baseline is not None else "",
+        _comparison(results, ingest_docs, baseline, k_values, latency_k, commit=commit)
+        if baseline is not None
+        else "",
         _ingestion(ingest_docs, ingest_path_list) if ingest_docs else "",
         _summary(results, profiles, k_values, latency_k) if results is not None else "",
         _quality(results, profiles, k_values, latency_k) if results is not None else "",
