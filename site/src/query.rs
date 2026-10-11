@@ -15,23 +15,22 @@ pub fn QueryPage() -> impl IntoView {
     let results = RwSignal::new(None::<Vec<DocHit>>);
     let error = RwSignal::new(None::<String>);
     let k_error = RwSignal::new(None::<String>);
+    let k_warning = RwSignal::new(false);
     let loading = RwSignal::new(false);
     let k_input = NodeRef::<html::Input>::new();
 
     let on_submit = Callback::new(move |question: String| {
         let k = k_input
             .get()
-            .and_then(|element| element.value().parse::<u64>().ok());
+            .and_then(|element| element.value().parse::<i64>().ok());
         let Some(k) = k else {
+            k_warning.set(false);
             k_error.set(Some("k must be a number".to_owned()));
             return;
         };
-        if !(MIN_K..=MAX_K).contains(&k) {
-            k_error.set(Some(format!("k must be between {MIN_K} and {MAX_K}")));
-            return;
-        }
 
         k_error.set(None);
+        k_warning.set(!(MIN_K as i64..=MAX_K as i64).contains(&k));
         error.set(None);
         results.set(None);
         loading.set(true);
@@ -55,6 +54,9 @@ pub fn QueryPage() -> impl IntoView {
                 <span class="field-hint">"1–20"</span>
             </div>
 
+            {move || k_warning.get().then(|| view! {
+                <p class="warning inline" role="status">{format!("Results are limited to {MIN_K}–{MAX_K}.")}</p>
+            })}
             {move || k_error.get().map(|message| view! { <p class="error inline">{message}</p> })}
 
             <Composer

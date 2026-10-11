@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 
 import { queryComposer, queryPanel, submit } from '../support';
 
-test('query page enforces k in 1..=20', async ({ page }) => {
+test('query page warns and clamps k outside 1..=20', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('button', { name: 'Query' }).click();
 
@@ -12,20 +12,27 @@ test('query page enforces k in 1..=20', async ({ page }) => {
   await expect(kInput).toHaveAttribute('max', '20');
 
   const composer = queryComposer(page);
-  const inlineError = panel.locator('.error.inline');
+  const warning = panel.locator('.warning.inline');
 
   await kInput.fill('21');
   await submit(composer, 'too many');
-  await expect(inlineError).toHaveText('k must be between 1 and 20');
+  await expect(warning).toHaveText('Results are limited to 1–20.');
+  await expect(panel.locator('.doc-card')).toHaveCount(3);
 
   await kInput.fill('0');
   await submit(composer, 'too few');
-  await expect(inlineError).toHaveText('k must be between 1 and 20');
+  await expect(warning).toHaveText('Results are limited to 1–20.');
+  await expect(panel.locator('.doc-card')).toHaveCount(1);
 
-  // A valid k clears the error and renders the canned hits.
+  await kInput.fill('-1');
+  await submit(composer, 'negative');
+  await expect(warning).toHaveText('Results are limited to 1–20.');
+  await expect(panel.locator('.doc-card')).toHaveCount(1);
+
+  // A valid k clears the warning and renders the requested canned hits.
   await kInput.fill('5');
   await submit(composer, 'just right');
-  await expect(inlineError).toHaveCount(0);
+  await expect(warning).toHaveCount(0);
   await expect(panel.locator('.doc-card')).toHaveCount(3);
   await expect(composer).toHaveValue('just right');
 });

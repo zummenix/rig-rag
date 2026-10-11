@@ -113,10 +113,10 @@ async fn query_more_than_available_returns_all() {
 }
 
 #[tokio::test]
-async fn query_rejects_out_of_range_k() {
+async fn query_clamps_out_of_range_k() {
     let url = spawn(MockCompleter::new()).await;
     let client = reqwest::Client::new();
-    for k in [0u64, 21] {
+    for (k, expected_hits) in [(-1i64, 1), (0, 1), (21, 3)] {
         let response = client
             .post(format!("{url}/api/query"))
             .json(&QueryRequest {
@@ -126,7 +126,12 @@ async fn query_rejects_out_of_range_k() {
             .send()
             .await
             .unwrap();
-        assert_eq!(response.status(), StatusCode::BAD_REQUEST, "k={k}");
+        assert_eq!(response.status(), StatusCode::OK, "k={k}");
+        assert_eq!(
+            response.json::<Vec<DocHit>>().await.unwrap().len(),
+            expected_hits,
+            "k={k}"
+        );
     }
 }
 

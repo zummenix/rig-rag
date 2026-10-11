@@ -1,7 +1,6 @@
 use axum::{
     Json,
     extract::State,
-    http::StatusCode,
     response::{IntoResponse, Response},
 };
 use shared::QueryRequest;
@@ -9,12 +8,9 @@ use shared::QueryRequest;
 use crate::retrieval::THRESHOLD;
 use crate::serve::{internal_error, state::AppState};
 
-/// `POST /api/query` — validate `k`, retrieve, return hits (possibly empty).
+/// `POST /api/query` — clamp `k`, retrieve, return hits (possibly empty).
 pub async fn handler(State(state): State<AppState>, Json(request): Json<QueryRequest>) -> Response {
-    let k = match request.effective_k() {
-        Ok(k) => k,
-        Err(error) => return (StatusCode::BAD_REQUEST, error.to_string()).into_response(),
-    };
+    let k = request.effective_k();
 
     match state
         .retriever
