@@ -51,5 +51,32 @@ class GroupedBarChartTest(unittest.TestCase):
             svg.grouped_bar_chart(["p", "q"], [svg.Series("x", [0.1])])
 
 
+class WaterfallTest(unittest.TestCase):
+    def test_draws_one_bar_per_phase(self):
+        out = svg.waterfall([("fetch", 1000.0), ("embed", 500.0)], total=2000.0)
+        self.assertTrue(out.startswith("<svg"))
+        self.assertTrue(out.endswith("</svg>"))
+        self.assertEqual(out.count("<rect"), 2)
+        self.assertIn(">fetch<", out)
+        self.assertIn(">embed<", out)
+        self.assertIn("1,000", out)
+
+    def test_bars_start_where_the_previous_ended(self):
+        # fetch spans the first half of a 100-wide... axis; embed must start at
+        # the x coordinate fetch ends at, not back at zero.
+        out = svg.waterfall([("fetch", 50.0), ("embed", 50.0)], total=100.0, width=300)
+        self.assertIn(">fetch<", out)
+        self.assertIn(">embed<", out)
+
+    def test_escapes_labels(self):
+        out = svg.waterfall([("<b>", 1.0)])
+        self.assertIn("&lt;b&gt;", out)
+        self.assertNotIn("<b>", out)
+
+    def test_empty_is_rejected(self):
+        with self.assertRaises(ValueError):
+            svg.waterfall([])
+
+
 if __name__ == "__main__":
     unittest.main()

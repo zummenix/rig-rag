@@ -40,6 +40,9 @@ pre { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px; paddin
 .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: .5rem 1.5rem; }
 ul.notes { margin: .4rem 0 1rem; padding-left: 1.2rem; }
 ul.notes li { margin: .25rem 0; }
+.statusline { margin: .2rem 0 .6rem; }
+p.warn { background: #fffbeb; border: 1px solid #fde68a; border-radius: 6px;
+  padding: .5rem .7rem; margin: .2rem 0 1rem; color: #92400e; font-size: .9rem; }
 footer { margin-top: 3rem; color: #6b7280; font-size: .82rem; border-top: 1px solid #e5e7eb; padding-top: 1rem; }
 dl.method { margin: .4rem 0 1rem; }
 dl.method dt { font-weight: 600; margin-top: .5rem; }
