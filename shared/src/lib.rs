@@ -63,42 +63,15 @@ pub struct QueryRequest {
     pub question: String,
     /// Number of hits to retrieve; defaults to [`DEFAULT_K`].
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub k: Option<u64>,
+    pub k: Option<i64>,
 }
-
-/// Why a requested `k` is out of range.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum KError {
-    /// Below [`MIN_K`].
-    TooSmall(u64),
-    /// Above [`MAX_K`].
-    TooLarge(u64),
-}
-
-impl std::fmt::Display for KError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::TooSmall(k) => write!(f, "k must be >= {MIN_K}, got {k}"),
-            Self::TooLarge(k) => write!(f, "k must be <= {MAX_K}, got {k}"),
-        }
-    }
-}
-
-impl std::error::Error for KError {}
 
 impl QueryRequest {
-    /// The effective `k`, defaulting to [`DEFAULT_K`] when omitted.
-    ///
-    /// Shared so the server and the UI enforce identical bounds.
-    pub fn effective_k(&self) -> Result<u64, KError> {
-        let k = self.k.unwrap_or(DEFAULT_K);
-        if k < MIN_K {
-            return Err(KError::TooSmall(k));
-        }
-        if k > MAX_K {
-            return Err(KError::TooLarge(k));
-        }
-        Ok(k)
+    /// The effective `k`, defaulting to [`DEFAULT_K`] and clamping to [`MIN_K`]..=[`MAX_K`].
+    pub fn effective_k(&self) -> u64 {
+        self.k
+            .unwrap_or(DEFAULT_K as i64)
+            .clamp(MIN_K as i64, MAX_K as i64) as u64
     }
 }
 
@@ -269,18 +242,16 @@ mod tests {
 
     #[test]
     fn query_request_k_bounds() {
-        let req = |k: Option<u64>| QueryRequest {
+        let req = |k: Option<i64>| QueryRequest {
             question: "q".into(),
             k,
         };
-        assert_eq!(req(None).effective_k().unwrap(), DEFAULT_K);
-        assert_eq!(req(Some(MIN_K)).effective_k().unwrap(), MIN_K);
-        assert_eq!(req(Some(MAX_K)).effective_k().unwrap(), MAX_K);
-        assert_eq!(req(Some(0)).effective_k(), Err(KError::TooSmall(0)));
-        assert_eq!(
-            req(Some(MAX_K + 1)).effective_k(),
-            Err(KError::TooLarge(21))
-        );
+        assert_eq!(req(None).effective_k(), DEFAULT_K);
+        assert_eq!(req(Some(MIN_K as i64)).effective_k(), MIN_K);
+        assert_eq!(req(Some(MAX_K as i64)).effective_k(), MAX_K);
+        assert_eq!(req(Some(-1)).effective_k(), MIN_K);
+        assert_eq!(req(Some(0)).effective_k(), MIN_K);
+        assert_eq!(req(Some(MAX_K as i64 + 1)).effective_k(), MAX_K);
     }
 
     #[test]

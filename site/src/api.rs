@@ -24,7 +24,7 @@ fn endpoint(path: &str) -> String {
 }
 
 /// `POST /api/query` — retrieve the `k` closest chunks.
-pub async fn query(question: String, k: u64) -> Result<Vec<DocHit>, String> {
+pub async fn query(question: String, k: i64) -> Result<Vec<DocHit>, String> {
     let response = reqwest::Client::new()
         .post(endpoint("/api/query"))
         .json(&QueryRequest {

@@ -255,6 +255,12 @@ body {
   font-size: 13px;
 }
 
+.warning.inline {
+  color: #e6b450;
+  margin: 8px 0 0;
+  font-size: 13px;
+}
+
 .thinking {
   background: var(--panel-2);
   border: 1px solid var(--border);
