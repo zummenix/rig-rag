@@ -106,6 +106,9 @@ def report_main(
     if args.results:
         results_path = Path(args.results)
         run_dir = results_path.parent
+    elif args.no_retrieval and args.ingest:
+        # Explicit ingest-only inputs do not require a discovered run.
+        run_dir = None
     else:
         parts = latest_run(root / "eval" / "results" / experiment)
         run_dir = parts.run_dir
