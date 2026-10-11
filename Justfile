@@ -32,10 +32,18 @@ eval-test:
 eval-run *args:
     python3 -m eval.runner {{args}}
 
+# Print the retrieval-eval runner's full option list.
+eval-run-help:
+    python3 -m eval.runner --help
+
 # Render an experiment's newest run to eval/reports/<experiment>.html.
 # e.g. `just eval-report baseline`.
 eval-report experiment:
     python3 -m eval.experiments.{{experiment}}.report
+
+# Print the report renderer's full option list (shared by every experiment).
+eval-report-help:
+    python3 -m eval.experiments.baseline.report --help
 
 # Everything: Rust workspace checks, the UI e2e suite, and the eval tests.
 check-all: check test-site eval-test

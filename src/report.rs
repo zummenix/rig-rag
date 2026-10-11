@@ -17,8 +17,8 @@ pub const TOKENIZER: &str = "tiktoken:cl100k_base";
 /// Encoding passed to `tiktoken::get_encoding`.
 const TOKENIZER_ENCODING: &str = "cl100k_base";
 
-/// The full `ingest --report` document. Mirrors the schema in
-/// `docs/eval-plan.md`; additions are backward-compatible, removals bump
+/// The full `ingest --report` document. Mirrors the schema documented in
+/// `eval/README.md`; additions are backward-compatible, removals bump
 /// [`SCHEMA_VERSION`].
 #[derive(Debug, Serialize)]
 pub struct IngestReport {
@@ -101,7 +101,7 @@ pub struct ChunkTokens {
 /// integer range, so no boundary is left to interpretation: `<50` covers 0–49,
 /// `50-99`, `100-199`, `200-399`, and `>=400` covers 400 and up. Exactly 50,
 /// 100, 200, and 400 land in the bucket whose lower bound they equal. The
-/// serialized keys match the `eval-plan.md` schema.
+/// serialized keys match the schema documented in `eval/README.md`.
 #[derive(Debug, Default, Serialize)]
 pub struct ChunkTokenBuckets {
     #[serde(rename = "<50")]
