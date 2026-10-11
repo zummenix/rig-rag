@@ -54,7 +54,7 @@ pub fn QueryPage() -> impl IntoView {
             </div>
 
             {move || k_warning.get().then(|| view! {
-                <p class="warning inline">{format!("Results are limited to {MIN_K}–{MAX_K}.")}</p>
+                <p class="warning inline" role="status">{format!("Results are limited to {MIN_K}–{MAX_K}.")}</p>
             })}
             {move || k_error.get().map(|message| view! { <p class="error inline">{message}</p> })}
 
