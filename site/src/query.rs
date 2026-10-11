@@ -24,6 +24,7 @@ pub fn QueryPage() -> impl IntoView {
             .get()
             .and_then(|element| element.value().parse::<i64>().ok());
         let Some(k) = k else {
+            k_warning.set(false);
             k_error.set(Some("k must be a number".to_owned()));
             return;
         };
