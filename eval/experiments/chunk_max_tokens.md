@@ -1,81 +1,5 @@
 # Experiment: Bound chunk size to the embedding window (`chunk_max_tokens`)
 
-<!--
-Measured and decided: the 384 cap is rejected (see [Decision](#decision)). The
-[Checklist](#checklist) below tracks the process and is deleted once final; see
-[`template.md`](template.md).
--->
-
-## Checklist
-
-**Stage 1 — Hypothesis (record only; no system code).**
-- [x] Satisfy `eval/README.md`'s Requirements (Qdrant reachable at the profile's
-      URL, `OPENROUTER_API_KEY`/`OPENROUTER_MODEL_NAME`, Python 3.11+, `git`).
-- [x] Fill in **only** the Hypothesis and Status sections: name the knob, the
-      metric(s) it should move, the direction, and what would falsify it. Do
-      **not** edit system code in this stage.
-- [x] Commit this hypothesis-only record on its own (a docs-only commit), so the
-      prediction is fixed before the code that tests it exists.
-      — committed as `40cf1eb`.
-
-**Stage 2 — Controlled change (system code only).**
-- [x] Make the controlled change in **one commit** that touches only system
-      code — never the harness (this record, the runner, the framework) and
-      never the render package. Work from a clean tree and push it: the runner
-      attributes a run to `HEAD` and refuses uncommitted tracked changes and
-      unpushed commits. (`--allow-dirty` skips the clean-tree check **only**;
-      the pushed-commit check still applies, and the recorded commit no longer
-      describes what was measured.)
-      — committed as `e1ecbe4` (`src/chunk.rs` only) and pushed on
-      `origin/zummenix/push-tzoxxwltkoup`.
-- [x] Fill in the Controlled change section: the arm table and the treatment
-      commit SHA. Leave Results, Interpretation, Decision, and Caveats empty
-      until stage 3.
-- [x] Confirm a baseline exists under the same profile definitions, pinned source
-      revisions, and embedding model; if not, re-record one and pin it by path.
-      — reused `eval/results/baseline/2026-10-10T15-58-51Z` @ `510d991`.
-- [x] Fix `--profiles`, `--k`, `--latency-k`, `--warmup`, and `--reps` now, and
-      carry those pinned values into every `eval-run` below.
-      — pinned to the reused baseline's settings (see
-      [Controlled change](#controlled-change)): `--profiles
-      single-project,multi-project --k 1,3,5,7,10,20 --latency-k 7 --warmup 3
-      --reps 5`.
-
-**Stage 3 — Interpretation (measure, then explain).**
-- [x] If re-recording a baseline: check out the baseline commit (normally the
-      treatment commit's parent), then run `just eval-run --experiment baseline
-      --force-ingest` plus your pinned flags; record its commit SHA and run id.
-      — n/a: the committed baseline is reused by path.
-- [x] Return to the treatment commit, then run `just eval-run --experiment
-      chunk_max_tokens --force-ingest` plus your pinned flags; record its run id.
-      — run id `2026-10-12T09-18-11Z`.
-- [x] Run both arms on the same profiles/pins/model. `promote` rewrites
-      `[collection].active` in the profile `rig-rag.toml`; with unchanged
-      pins/model that value is stable, so the tree normally stays clean.
-- [x] `<run_id>` is the UTC-timestamp directory the runner prints (e.g.
-      `2026-10-10T15-58-51Z`).
-- [x] Fill **Results** and **Interpretation** only from what was measured.
-
-**Stage 4 — Decision (record and land).**
-- [x] Fill **Decision** and **Caveats**.
-- [x] Add a row to the [Experiments](../README.md#experiments) table.
-- [x] Create `eval/experiments/chunk_max_tokens/{__init__.py,report.py}` (pin
-      this record's baseline run by path) so `just eval-report chunk_max_tokens`
-      renders.
-- [ ] Commit the artifacts: `results.json`, `ingest-*.json`, and this `.md`.
-      `hits.jsonl`, `serve-*.log`, and `eval/reports/*.html` stay gitignored —
-      the HTML report is regenerated from the committed input
-      (`just eval-report chunk_max_tokens`).
-- [ ] Push the commit that lands the results (and the measured commits), so the
-      record and its runs stay reachable from a clean clone.
-- [ ] Reuse the `Eval-Experiment:` / `Eval-Commit:` trailer the runner prints on
-      the commit that lands the results, so a git-only reader can trace the run.
-- [ ] Adopted: keep the treatment commit on the main line.
-- [ ] Rejected: revert **only the code** in a new commit — the measured commit
-      stays in history, so the hash remains reproducible while the eval docs
-      persist.
-- [ ] **Delete this Checklist section** — the record is now final.
-
 **Hypothesis.** `chunk_md_doc` currently uses the chunker's default cap of 512
 `o200k_base` tokens, which exceeds BGE-small-en-v1.5's 512-token WordPiece
 window, so the longest chunks are silently truncated when embedded. Capping
@@ -210,8 +134,8 @@ retrieval cost outweighs it.
 - Revisit only with a different mechanism (see [Caveats](#caveats) → follow-ups)
   and a stronger question set; re-applying is cheap.
 
-Revert **only the code** in a follow-up commit. The measured artifacts
-(`eval/results/baseline/2026-10-10T15-58-51Z`,
+Revert **only the code**: the `src/chunk.rs` change is reverted in `25fe302`.
+The measured artifacts (`eval/results/baseline/2026-10-10T15-58-51Z`,
 `eval/results/chunk_max_tokens/2026-10-12T09-18-11Z`) and the controlled-change
 commit `e1ecbe4` stay in history.
 
