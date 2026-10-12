@@ -9,13 +9,14 @@ committed; see the [Checklist](#checklist) below and
 ## Checklist
 
 **Stage 1 — Hypothesis (record only; no system code).**
-- [ ] Satisfy `eval/README.md`'s Requirements (Qdrant reachable at the profile's
+- [x] Satisfy `eval/README.md`'s Requirements (Qdrant reachable at the profile's
       URL, `OPENROUTER_API_KEY`/`OPENROUTER_MODEL_NAME`, Python 3.11+, `git`).
 - [x] Fill in **only** the Hypothesis and Status sections: name the knob, the
       metric(s) it should move, the direction, and what would falsify it. Do
       **not** edit system code in this stage.
-- [ ] Commit this hypothesis-only record on its own (a docs-only commit), so the
+- [x] Commit this hypothesis-only record on its own (a docs-only commit), so the
       prediction is fixed before the code that tests it exists.
+      — committed as `40cf1eb`.
 
 **Stage 2 — Controlled change (system code only).**
 - [ ] Make the controlled change in **one commit** that touches only system
@@ -25,11 +26,14 @@ committed; see the [Checklist](#checklist) below and
       unpushed commits. (`--allow-dirty` skips the clean-tree check **only**;
       the pushed-commit check still applies, and the recorded commit no longer
       describes what was measured.)
+      — committed as `e1ecbe4` (`src/chunk.rs` only); **not yet pushed**
+      (`HEAD` is detached and `origin/main` is behind).
 - [ ] Fill in the Controlled change section: the arm table and the treatment
       commit SHA. Leave Results, Interpretation, Decision, and Caveats empty
       until stage 3.
-- [ ] Confirm a baseline exists under the same profile definitions, pinned source
+- [x] Confirm a baseline exists under the same profile definitions, pinned source
       revisions, and embedding model; if not, re-record one and pin it by path.
+      — reused `eval/results/baseline/2026-10-10T15-58-51Z` @ `510d991`.
 - [ ] Fix `--profiles`, `--k`, `--latency-k`, `--warmup`, and `--reps` now, and
       carry those pinned values into every `eval-run` below.
 
