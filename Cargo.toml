@@ -36,6 +36,7 @@ anyhow = "1.0.104"
 axum = "0.8"
 chunkedrs = "2.1.1"
 clap = { version = "4", features = ["derive"] }
+fastembed = "4.9.1"
 futures = "0.3"
 hex = "0.4"
 libc = "0.2"
@@ -51,6 +52,7 @@ tokio = { version = "1.53.2", features = ["macros", "net", "rt-multi-thread", "t
 toml = "1.1"
 toml_edit = "0.25"
 tower-http = { version = "0.6", features = ["fs"] }
+uuid = "1.28.0"
 
 [dev-dependencies]
 eventsource-stream = "0.2"
