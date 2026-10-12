@@ -221,8 +221,9 @@ template, work the checklist, then delete it once the Decision is recorded.
 
 1. Make the controlled change in **one commit** that touches only system code,
    never the harness, from a clean pushed tree.
-2. Run the arms (`just eval-run --experiment <id> --force-ingest`, plus a
-   baseline arm if none exists under the same profiles/model).
+2. Run the arms with identical profile definitions, source revisions, model, and
+   pinned runner settings (`just eval-run --experiment <id> --force-ingest`, plus
+   a baseline arm if no matching baseline exists).
 3. Write `eval/experiments/<id>.md`: hypothesis, controlled change, measured git
    commit SHA, results and interpretation, decision, caveats, and reproduction,
    plus the profile `sources.json` / `rig-rag.toml` used.
