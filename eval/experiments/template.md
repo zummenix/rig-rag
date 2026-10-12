@@ -43,8 +43,8 @@ stages. See eval/README.md for flags, profiles, metrics, and contracts.
       unpushed commits. (`--allow-dirty` skips the clean-tree check **only**;
       the pushed-commit check still applies, and the recorded commit no longer
       describes what was measured.)
-- [ ] Confirm a baseline exists under the same profiles and embedding model; if
-      not, re-record one and pin it by path.
+- [ ] Confirm a baseline exists under the same profile definitions, pinned source
+      revisions, and embedding model; if not, re-record one and pin it by path.
 - [ ] Fix `--profiles`, `--k`, `--latency-k`, `--warmup`, and `--reps` now, and
       carry those pinned values into every `eval-run` below.
 
