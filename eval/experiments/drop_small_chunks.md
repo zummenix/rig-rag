@@ -129,22 +129,3 @@ just eval-run --experiment drop_small_chunks --force-ingest
 git checkout <your-branch>
 just eval-report drop_small_chunks
 ```
-
-## Embedded summary (JSON)
-
-```json
-{
-  "experiment": "drop_small_chunks",
-  "min_chunk_tokens": 15,
-  "baseline": {"commit": "510d9915d25afdcee38c32e72cfbdcd2fc2d9126", "run": "2026-10-10T15-58-51Z"},
-  "treatment": {"commit": "25d1341b83e8a5ab0e1bc97948e5b4c8a0060512", "run": "2026-10-10T16-51-52Z"},
-  "ingest_delta": {
-    "single-project": {"embeddings": -5, "tokens": -59, "embed_ms": -550, "total_ms": -663},
-    "multi-project": {"embeddings": -452, "tokens": -4705, "embed_ms": -21285, "total_ms": -22579}
-  },
-  "retrieval_delta": {
-    "single-project": {"recall@7": 0.0, "purity@7": 0.0, "p95_ms": -0.36},
-    "multi-project": {"recall@7": 0.0, "purity@7": -0.024, "p95_ms": -0.44}
-  }
-}
-```

@@ -224,8 +224,8 @@ template, work the checklist, then delete it once the Decision is recorded.
 2. Run the arms (`just eval-run --experiment <id> --force-ingest`, plus a
    baseline arm if none exists under the same profiles/model).
 3. Write `eval/experiments/<id>.md`: hypothesis, controlled change, measured git
-   commit SHA, embedded JSON summary, and the profile `sources.json` /
-   `rig-rag.toml` used.
+   commit SHA, results and interpretation, decision, caveats, and reproduction,
+   plus the profile `sources.json` / `rig-rag.toml` used.
 4. Commit the results JSON and the experiment record; the HTML report is
    regenerated from the committed input (`just eval-report <id>`) and is **not**
    committed. If the experiment is unsuccessful, revert **only the code** in a

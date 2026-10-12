@@ -51,8 +51,7 @@ stages. See eval/README.md for flags, profiles, metrics, and contracts.
       rewrite the tracked profile `rig-rag.toml` (the active collection).
 
 **Record.**
-- [ ] Fill the Results, Interpretation, Decision, and Caveats sections; embed
-      the JSON summary.
+- [ ] Fill the Results, Interpretation, Decision, and Caveats sections.
 - [ ] Add a row to the [Experiments](../README.md#experiments) table.
 - [ ] Commit the artifacts: `results.json`, `ingest-*.json`, and this `.md`.
       `hits.jsonl`, `serve-*.log`, and `eval/reports/*.html` stay gitignored —
@@ -209,28 +208,3 @@ git checkout <your-branch>
 just eval-report <experiment_id>
 ```
 
-## Embedded summary (JSON)
-
-<!--
-A machine-readable summary of the same numbers, so the record can be parsed
-without re-reading the prose. Keep the keys stable across experiments where the
-concept matches; add keys freely for experiment-specific knobs. The `@k` labels
-must match the run's `--latency-k` (default 7).
--->
-
-```json
-{
-  "experiment": "<experiment_id>",
-  "<knob>": "<treatment value>",
-  "baseline": {"commit": "<baseline_commit_sha>", "run": "<run_id>"},
-  "treatment": {"commit": "<treatment_commit_sha>", "run": "<run_id>"},
-  "ingest_delta": {
-    "single-project": {"embeddings": 0, "tokens": 0, "embed_ms": 0, "total_ms": 0},
-    "multi-project": {"embeddings": 0, "tokens": 0, "embed_ms": 0, "total_ms": 0}
-  },
-  "retrieval_delta": {
-    "single-project": {"recall@7": 0.0, "purity@7": 0.0, "p95_ms": 0.0},
-    "multi-project": {"recall@7": 0.0, "purity@7": 0.0, "p95_ms": 0.0}
-  }
-}
-```
