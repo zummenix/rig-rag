@@ -46,6 +46,7 @@ flag lists, run `just eval-run-help` and `just eval-report-help`.
 | Experiment | Status |
 | --- | --- |
 | [Drop small chunks](experiments/drop_small_chunks.md) | **Rejected** (not adopted) — a small, corpus-skewed ingest-cost win (−4.5% multi-project embeddings, almost all `podman` fragments) that the question suite is too weak to certify as recall-safe |
+| [Bound chunk size to the embedding window](experiments/chunk_max_tokens.md) | **Rejected** (not adopted) — capping chunks at 384 `o200k_base` tokens fixed BGE-window truncation mechanically but regressed `jj-new-change` (rank 1 → beyond k=10); MRR down and cost up |
 
 Each experiment is an `eval/experiments/<id>.md` record plus a run under
 `eval/results/<id>/`; add a row here when a new one lands. The `baseline` id is
@@ -219,19 +220,29 @@ record's four stages (hypothesis, controlled change, interpretation, decision)
 and carries a copy-and-follow checklist covering the whole process — copy the
 template, work the checklist, then delete it once the Decision is recorded.
 
-1. Make the controlled change in **one commit** that touches only system code,
-   never the harness, from a clean pushed tree.
-2. Run the arms with identical profile definitions, source revisions, model, and
-   pinned runner settings (`just eval-run --experiment <id> --force-ingest`, plus
-   a baseline arm if no matching baseline exists).
-3. Write `eval/experiments/<id>.md`: hypothesis, controlled change, measured git
-   commit SHA, results and interpretation, decision, caveats, and reproduction,
+Work the four stages strictly in order, each as its own commit, and do not start
+a stage while an earlier one is uncommitted:
+
+1. **Hypothesis.** Copy `experiments/template.md` to
+   `eval/experiments/<id>.md` and fill in only the Hypothesis and Status, then
+   commit that hypothesis-only record. **No system code changes yet** — the
+   prediction is fixed before the code that tests it exists.
+2. **Controlled change.** Make the controlled change in **one commit** that
+   touches only system code, never the harness (the record, the runner, the
+   framework) or the render package, from a clean pushed tree. Fill the record's
+   Controlled change section (arm table + treatment commit SHA).
+3. **Interpretation.** Run the arms with identical profile definitions, source
+   revisions, model, and pinned runner settings (`just eval-run --experiment
+   <id> --force-ingest`, plus a baseline arm if no matching baseline exists),
+   then fill the record's Results and Interpretation **from what was measured**,
    plus the profile `sources.json` / `rig-rag.toml` used.
-4. Commit the results JSON and the experiment record; the HTML report is
-   regenerated from the committed input (`just eval-report <id>`) and is **not**
-   committed. If the experiment is unsuccessful, revert **only the code** in a
-   new commit — the measured commit stays in history, so the hash remains
-   reproducible while the eval docs persist.
+4. **Decision.** Fill Decision and Caveats, add the [Experiments](#experiments)
+   row, create `eval/experiments/<id>/report.py`, and commit the results JSON,
+   the ingest reports, and the record; the HTML report is regenerated from the
+   committed input (`just eval-report <id>`) and is **not** committed. If the
+   experiment is unsuccessful, revert **only the code** in a new commit — the
+   measured commit stays in history, so the hash remains reproducible while the
+   eval docs persist.
 
 Each `eval/experiments/<id>/report.py` renders that experiment's newest committed
 run; the recorded experiments are listed under [Experiments](#experiments).
@@ -282,6 +293,12 @@ keeping:
   (`hits.jsonl`, `serve-*.log`) are kept per-run and gitignored, while
   `results.json` (and `ingest-*.json`) are the committed artifacts — keep them
   small.
+- **Running from the treatment commit.** The record's own edits dirty the tree,
+  so a clean `eval-run` needs them committed — but that advances `HEAD` past the
+  treatment commit (a docs commit), so the runner records *that* commit instead
+  of the code change. Run each arm from a detached checkout of its pinned
+  commit, or a separate `git worktree`, so `results.json`'s `commit` is the
+  treatment commit.
 
 ## Tests
 

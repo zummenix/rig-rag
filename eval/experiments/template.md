@@ -15,12 +15,18 @@ Experiments table as well, for discoverability. Delete the guidance comments as
 you go, and leave anything you could not measure as an explicit "not measured"
 rather than guessing.
 
-The record has four stages, in order:
-  1. Hypothesis           — what you expect and why.
+The record has four stages, in order. Work them strictly one at a time, each as
+its own commit, and do not start a stage while an earlier one is uncommitted:
+  1. Hypothesis           — what you expect and why. Write and commit this
+                            before any system code exists; the record is the
+                            only file that changes.
   2. Controlled change    — the system commit that tests it, isolated so the
-                            docs survive a revert.
+                            docs survive a revert. System code only: never the
+                            record, the runner, the framework, or the render
+                            package.
   3. Interpretation       — the measured results (## Results) and what they mean
-                            (## Interpretation).
+                            (## Interpretation). Nothing here is written before
+                            the arms are run.
   4. Decision             — adopt the change, or revert only the code.
 ## Caveats and ## Reproduction are supporting sections, not stages.
 -->
@@ -33,22 +39,32 @@ step (once the Decision is recorded), so the final record holds only the four
 stages. See eval/README.md for flags, profiles, metrics, and contracts.
 -->
 
-**Set up.**
+**Stage 1 — Hypothesis (record only; no system code).**
 - [ ] Satisfy `eval/README.md`'s Requirements (Qdrant reachable at the profile's
       URL, `OPENROUTER_API_KEY`/`OPENROUTER_MODEL_NAME`, Python 3.11+, `git`).
-- [ ] Fill in the hypothesis, the knob, and what would falsify it.
+- [ ] Fill in **only** the Hypothesis and Status sections: name the knob, the
+      metric(s) it should move, the direction, and what would falsify it. Do
+      **not** edit system code in this stage.
+- [ ] Commit this hypothesis-only record on its own (a docs-only commit), so the
+      prediction is fixed before the code that tests it exists.
+
+**Stage 2 — Controlled change (system code only).**
 - [ ] Make the controlled change in **one commit** that touches only system
-      code — never the harness. Work from a clean tree and push it: the runner
+      code — never the harness (this record, the runner, the framework) and
+      never the render package. Work from a clean tree and push it: the runner
       attributes a run to `HEAD` and refuses uncommitted tracked changes and
       unpushed commits. (`--allow-dirty` skips the clean-tree check **only**;
       the pushed-commit check still applies, and the recorded commit no longer
       describes what was measured.)
+- [ ] Fill in the Controlled change section: the arm table and the treatment
+      commit SHA. Leave Results, Interpretation, Decision, and Caveats empty
+      until stage 3.
 - [ ] Confirm a baseline exists under the same profile definitions, pinned source
       revisions, and embedding model; if not, re-record one and pin it by path.
 - [ ] Fix `--profiles`, `--k`, `--latency-k`, `--warmup`, and `--reps` now, and
       carry those pinned values into every `eval-run` below.
 
-**Measure.**
+**Stage 3 — Interpretation (measure, then explain).**
 - [ ] If re-recording a baseline: check out the baseline commit (normally the
       treatment commit's parent), then run `just eval-run --experiment baseline
       --force-ingest` plus your pinned flags; record its commit SHA and run id.
@@ -59,10 +75,14 @@ stages. See eval/README.md for flags, profiles, metrics, and contracts.
       pins/model that value is stable, so the tree normally stays clean.
 - [ ] `<run_id>` is the UTC-timestamp directory the runner prints (e.g.
       `2026-10-10T15-58-51Z`).
+- [ ] Fill **Results** and **Interpretation** only from what was measured.
 
-**Record.**
-- [ ] Fill the Results, Interpretation, Decision, and Caveats sections.
+**Stage 4 — Decision (record and land).**
+- [ ] Fill **Decision** and **Caveats**.
 - [ ] Add a row to the [Experiments](../README.md#experiments) table.
+- [ ] Create `eval/experiments/<experiment_id>/{__init__.py,report.py}` (pin
+      this record's baseline run by path) so `just eval-report <experiment_id>`
+      renders.
 - [ ] Commit the artifacts: `results.json`, `ingest-*.json`, and this `.md`.
       `hits.jsonl`, `serve-*.log`, and `eval/reports/*.html` stay gitignored —
       the HTML report is regenerated from the committed input
@@ -71,11 +91,6 @@ stages. See eval/README.md for flags, profiles, metrics, and contracts.
       record and its runs stay reachable from a clean clone.
 - [ ] Reuse the `Eval-Experiment:` / `Eval-Commit:` trailer the runner prints on
       the commit that lands the results, so a git-only reader can trace the run.
-- [ ] Create `eval/experiments/<experiment_id>/{__init__.py,report.py}` (pin
-      this record's baseline run by path) so `just eval-report <experiment_id>`
-      renders.
-
-**Decide.**
 - [ ] Adopted: keep the treatment commit on the main line.
 - [ ] Rejected: revert **only the code** in a new commit — the measured commit
       stays in history, so the hash remains reproducible while the eval docs
