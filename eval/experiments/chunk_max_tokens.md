@@ -1,9 +1,9 @@
 # Experiment: Bound chunk size to the embedding window (`chunk_max_tokens`)
 
 <!--
-Stage 1 — Hypothesis: this record only. Do not touch system code until this is
-committed; see the [Checklist](#checklist) below and
-[`template.md`](template.md).
+Stage 2 complete: the controlled change is committed and pushed. Next, Stage 3 —
+measure both arms, then fill Results and Interpretation. See the
+[Checklist](#checklist) below and [`template.md`](template.md).
 -->
 
 ## Checklist
@@ -19,23 +19,27 @@ committed; see the [Checklist](#checklist) below and
       — committed as `40cf1eb`.
 
 **Stage 2 — Controlled change (system code only).**
-- [ ] Make the controlled change in **one commit** that touches only system
+- [x] Make the controlled change in **one commit** that touches only system
       code — never the harness (this record, the runner, the framework) and
       never the render package. Work from a clean tree and push it: the runner
       attributes a run to `HEAD` and refuses uncommitted tracked changes and
       unpushed commits. (`--allow-dirty` skips the clean-tree check **only**;
       the pushed-commit check still applies, and the recorded commit no longer
       describes what was measured.)
-      — committed as `e1ecbe4` (`src/chunk.rs` only); **not yet pushed**
-      (`HEAD` is detached and `origin/main` is behind).
-- [ ] Fill in the Controlled change section: the arm table and the treatment
+      — committed as `e1ecbe4` (`src/chunk.rs` only) and pushed on
+      `origin/zummenix/push-tzoxxwltkoup`.
+- [x] Fill in the Controlled change section: the arm table and the treatment
       commit SHA. Leave Results, Interpretation, Decision, and Caveats empty
       until stage 3.
 - [x] Confirm a baseline exists under the same profile definitions, pinned source
       revisions, and embedding model; if not, re-record one and pin it by path.
       — reused `eval/results/baseline/2026-10-10T15-58-51Z` @ `510d991`.
-- [ ] Fix `--profiles`, `--k`, `--latency-k`, `--warmup`, and `--reps` now, and
+- [x] Fix `--profiles`, `--k`, `--latency-k`, `--warmup`, and `--reps` now, and
       carry those pinned values into every `eval-run` below.
+      — pinned to the reused baseline's settings (see
+      [Controlled change](#controlled-change)): `--profiles
+      single-project,multi-project --k 1,3,5,7,10,20 --latency-k 7 --warmup 3
+      --reps 5`.
 
 **Stage 3 — Interpretation (measure, then explain).**
 - [ ] If re-recording a baseline: check out the baseline commit (normally the
@@ -80,19 +84,39 @@ knob is the chunk-size cap in `src/chunk.rs`; the metric is `recall@k` (plus
 ingest cost). Falsified by any `recall@k` regression on an answerable question,
 or by a cost increase with no retrieval movement.
 
-**Status:** draft — hypothesis recorded, not yet measured.
+**Status:** draft — hypothesis recorded; controlled change committed (`e1ecbe4`)
+and pushed; not yet measured.
 
 ## Controlled change
 
-<!-- Stage 2. Leave empty until the controlled change is committed. -->
+One line in `src/chunk.rs`: `chunk_md_doc` now chains
+`.max_tokens(MAX_CHUNK_TOKENS)` with a new private `MAX_CHUNK_TOKENS = 384`,
+replacing the chunker's implicit default of 512. The markdown strategy, overlap
+(0), the embedding model, retrieval, and the serve path are unchanged. The change
+is isolated in its own commit so it can be reverted without touching the harness.
 
-<Exactly what changed in the system's code, and what deliberately did *not*
-change. Keep it to the smallest diff that isolates the hypothesis.>
+Why 384: the cap is expressed in the chunker's `o200k_base` vocabulary, which
+runs smaller than both the report's `cl100k_base` count and BGE's WordPiece count
+for the same text. The baseline's longest chunk measured 586 `cl100k_base` tokens
+under the 512 `o200k` default, so 384 leaves headroom for those vocabularies to
+disagree without re-entering the truncation zone.
 
 | arm | `MAX_CHUNK_TOKENS` | commit | run |
 | --- | ---: | --- | --- |
-| baseline | <production value> | `<baseline_commit_sha>` | `eval/results/baseline/<run_id>` |
-| treatment | <treatment value> | `<treatment_commit_sha>` | `eval/results/chunk_max_tokens/<run_id>` |
+| baseline | chunker default 512 | `510d9915d25afdcee38c32e72cfbdcd2fc2d9126` | `eval/results/baseline/2026-10-10T15-58-51Z` |
+| treatment | 384 | `e1ecbe4989c835d96c98bf101b149a20e1c32d29` | `eval/results/chunk_max_tokens/<run_id>` |
+
+The baseline is reused by path (the committed run above), not re-recorded: it was
+measured on the same profiles, pinned sources, and model, with the chunker's
+default 512 cap (no `MAX_CHUNK_TOKENS` override). Both arms use the profiles
+`eval/profiles/{single,multi}-project/{rig-rag.toml,sources.json}` with pinned
+sources `jj @ 9a1ad09b16e87d5d5e25759e5027953f8257be98`,
+`podman @ e3ed4e39137fbe457dbf09c4a9d66d6e1f31e365`,
+`qdrant @ 9855e50fc739de44a223a1c50faced806a868b6a`, and model
+`bge-small-en-v1.5` (384 dims). Pinned runner settings, identical to the reused
+baseline: `--profiles single-project,multi-project`, `--k 1,3,5,7,10,20`,
+`--latency-k 7`, `--warmup 3`, `--reps 5`, and `--force-ingest` so cost is
+measured, not `reused`.
 
 ## Results
 
