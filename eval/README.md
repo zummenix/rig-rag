@@ -46,6 +46,7 @@ flag lists, run `just eval-run-help` and `just eval-report-help`.
 | Experiment | Status |
 | --- | --- |
 | [Drop small chunks](experiments/drop_small_chunks.md) | **Rejected** (not adopted) — a small, corpus-skewed ingest-cost win (−4.5% multi-project embeddings, almost all `podman` fragments) that the question suite is too weak to certify as recall-safe |
+| [Bound chunk size to the embedding window](experiments/chunk_max_tokens.md) | **Rejected** (not adopted) — capping chunks at 384 `o200k_base` tokens fixed BGE-window truncation mechanically but regressed `jj-new-change` (rank 1 → beyond k=10); MRR down and cost up |
 
 Each experiment is an `eval/experiments/<id>.md` record plus a run under
 `eval/results/<id>/`; add a row here when a new one lands. The `baseline` id is
@@ -292,6 +293,12 @@ keeping:
   (`hits.jsonl`, `serve-*.log`) are kept per-run and gitignored, while
   `results.json` (and `ingest-*.json`) are the committed artifacts — keep them
   small.
+- **Running from the treatment commit.** The record's own edits dirty the tree,
+  so a clean `eval-run` needs them committed — but that advances `HEAD` past the
+  treatment commit (a docs commit), so the runner records *that* commit instead
+  of the code change. Run each arm from a detached checkout of its pinned
+  commit, or a separate `git worktree`, so `results.json`'s `commit` is the
+  treatment commit.
 
 ## Tests
 

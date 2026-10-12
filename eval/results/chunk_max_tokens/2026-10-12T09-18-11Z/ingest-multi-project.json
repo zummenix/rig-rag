@@ -1,0 +1,109 @@
+{
+  "schema_version": 1,
+  "status": "rebuilt",
+  "profile": "multi-project",
+  "config": "eval/profiles/multi-project/rig-rag.toml",
+  "sources": "eval/profiles/multi-project/sources.json",
+  "collection": "eval-multi-project-bge-small-en-v1-5-a3ea89d89f3c",
+  "prefix": "eval-multi-project",
+  "force": true,
+  "model": {
+    "slug": "bge-small-en-v1.5",
+    "dimensions": 384
+  },
+  "timing_ms": {
+    "fetch": 15931,
+    "load": 138,
+    "chunk": 338,
+    "embed": 634779,
+    "insert": 12123,
+    "total": 664511
+  },
+  "memory": {
+    "peak_rss_bytes": 17716248576,
+    "cgroup_peak_bytes": null
+  },
+  "tokenizer": "tiktoken:cl100k_base",
+  "sources_detail": [
+    {
+      "name": "jj",
+      "url": "https://github.com/jj-vcs/jj",
+      "ref": "9a1ad09b16e87d5d5e25759e5027953f8257be98",
+      "resolved_commit": "9a1ad09b16e87d5d5e25759e5027953f8257be98",
+      "documents": 52,
+      "chunks": 855,
+      "tokens": 151816,
+      "chunk_tokens": {
+        "min": 11,
+        "max": 422,
+        "mean": 177.5625730994152,
+        "p50": 146,
+        "p90": 369,
+        "buckets": {
+          "<50": 87,
+          "50-99": 189,
+          "100-199": 270,
+          "200-399": 302,
+          ">=400": 7
+        }
+      }
+    },
+    {
+      "name": "podman",
+      "url": "https://github.com/podman-container-tools/podman",
+      "ref": "e3ed4e39137fbe457dbf09c4a9d66d6e1f31e365",
+      "resolved_commit": "e3ed4e39137fbe457dbf09c4a9d66d6e1f31e365",
+      "documents": 446,
+      "chunks": 2591,
+      "tokens": 234392,
+      "chunk_tokens": {
+        "min": 4,
+        "max": 428,
+        "mean": 90.4639135468931,
+        "p50": 49,
+        "p90": 260,
+        "buckets": {
+          "<50": 1298,
+          "50-99": 576,
+          "100-199": 344,
+          "200-399": 358,
+          ">=400": 15
+        }
+      }
+    },
+    {
+      "name": "qdrant",
+      "url": "https://github.com/qdrant/landing_page",
+      "ref": "9855e50fc739de44a223a1c50faced806a868b6a",
+      "resolved_commit": "9855e50fc739de44a223a1c50faced806a868b6a",
+      "documents": 3220,
+      "chunks": 7048,
+      "tokens": 1112048,
+      "chunk_tokens": {
+        "min": 4,
+        "max": 445,
+        "mean": 157.78206583427922,
+        "p50": 127,
+        "p90": 342,
+        "buckets": {
+          "<50": 889,
+          "50-99": 1895,
+          "100-199": 2160,
+          "200-399": 2062,
+          ">=400": 42
+        }
+      }
+    }
+  ],
+  "totals": {
+    "documents": 3718,
+    "chunks": 10494,
+    "tokens": 1498256,
+    "embeddings": 10494
+  },
+  "environment": {
+    "os": "macos",
+    "arch": "aarch64",
+    "qdrant_url": "http://localhost:6334"
+  }
+}
