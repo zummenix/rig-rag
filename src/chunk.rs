@@ -43,22 +43,11 @@ impl rig::Embed for DocChunk {
     }
 }
 
-/// Maximum tokens per chunk, in the chunker's default `o200k_base` vocabulary.
-///
-/// The chunker's own default (512) does not match the embedding model:
-/// BGE-small-en-v1.5 accepts 512 WordPiece tokens, and 512 `o200k_base` tokens
-/// run larger than that — the baseline's longest chunk measured 586
-/// `cl100k_base` tokens under the default cap — so the longest chunks were being
-/// silently truncated when embedded. 384 keeps a chunk inside BGE's window with
-/// margin.
-const MAX_CHUNK_TOKENS: usize = 384;
-
 /// Splits document into chunks.
 pub fn chunk_md_doc(path: &Path, doc: &str) -> Vec<DocChunk> {
     let doc = Document::new(doc);
     let chunks = chunkedrs::chunk(doc.text)
         .markdown()
-        .max_tokens(MAX_CHUNK_TOKENS)
         .split()
         .into_iter()
         .map(|chunk| {
@@ -225,14 +214,5 @@ mod tests {
                 "FAQ > OAuth > Token expiration\n\nAccess tokens expire after 60 minutes..."
             )
         );
-    }
-
-    #[test]
-    fn chunk_md_doc_splits_sections_over_max_tokens() {
-        // ~430 words is above MAX_CHUNK_TOKENS (384) but below the chunker's
-        // former default (512), so this splits only while the cap is in effect.
-        let body = "word ".repeat(430);
-        let chunks = chunk_md_doc(Path::new("big.md"), &format!("# Big\n\n{body}"));
-        assert!(chunks.len() > 1, "a section over the cap must split");
     }
 }
