@@ -214,8 +214,15 @@ An experiment is a controlled code change measured against the committed
 baseline. The runner records the **git commit SHA** (`git rev-parse HEAD`), not
 a jj change-id, so a git-only reader can check out the exact measured code.
 
-1. Make the controlled change on a bookmark/branch.
-2. Run `ingest` (with `--report`) and the query-eval runner against it.
+Start from [`experiments/template.md`](experiments/template.md): it lays out the
+record's four stages (hypothesis, controlled change, interpretation, decision)
+and carries a copy-and-follow checklist covering the whole process — copy the
+template, work the checklist, then delete it once the Decision is recorded.
+
+1. Make the controlled change in **one commit** that touches only system code,
+   never the harness, from a clean pushed tree.
+2. Run the arms (`just eval-run --experiment <id> --force-ingest`, plus a
+   baseline arm if none exists under the same profiles/model).
 3. Write `eval/experiments/<id>.md`: hypothesis, controlled change, measured git
    commit SHA, embedded JSON summary, and the profile `sources.json` /
    `rig-rag.toml` used.
