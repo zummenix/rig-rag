@@ -49,11 +49,11 @@ stages. See eval/README.md for flags, profiles, metrics, and contracts.
       carry those pinned values into every `eval-run` below.
 
 **Measure.**
-- [ ] If re-recording a baseline: `just eval-run --experiment baseline
+- [ ] If re-recording a baseline: check out the baseline commit (normally the
+      treatment commit's parent), then run `just eval-run --experiment baseline
       --force-ingest` plus your pinned flags; record its commit SHA and run id.
-- [ ] Treatment: at the treatment commit, `just eval-run --experiment
-      <experiment_id> --force-ingest` plus your pinned flags; record its commit
-      SHA and run id.
+- [ ] Return to `<treatment_commit_sha>`, then run `just eval-run --experiment
+      <experiment_id> --force-ingest` plus your pinned flags; record its run id.
 - [ ] Run both arms on the same profiles/pins/model. `promote` rewrites
       `[collection].active` in the profile `rig-rag.toml`; with unchanged
       pins/model that value is stable, so the tree normally stays clean.
