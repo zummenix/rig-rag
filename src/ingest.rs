@@ -103,8 +103,8 @@ pub async fn run(
     }
 
     let dims = embedding::dimensions(&config.embedding.model)?;
-    store::create_collection(&client, &target, dims).await?;
     let model = embedding::load_slug(&config.embedding.model)?;
+    store::create_collection(&client, &target, dims).await?;
 
     timers.start();
     let documents = load_documents(&sources, data_root)?;
