@@ -6246,19 +6246,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "rig-qdrant"
-version = "0.44.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "761373d3a7863c9d5a60983ee0e74d2476fda9a71aaeec6266c88e644fa12072"
-dependencies = [
- "qdrant-client",
- "rig-core",
- "serde",
- "serde_json",
- "uuid",
-]
-
-[[package]]
 name = "rig-rag"
 version = "0.1.0"
 dependencies = [
@@ -6274,7 +6261,6 @@ dependencies = [
  "qdrant-client",
  "reqwest 0.12.28",
  "rig",
- "rig-qdrant",
  "serde",
  "serde_json",
  "sha2 0.11.0",

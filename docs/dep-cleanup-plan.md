@@ -15,7 +15,7 @@ depend on rig's wrappers and use all new features.
       crates directly into the codebae instead of rig
 - [x] Run eval and check that we don't hit regression in query
 - [x] Remove rig's `fastembed` feature
-- [ ] Remove `rig-qdrant` crate
+- [x] Remove `rig-qdrant` crate
 - [ ] Update `fastembed` to the latest version
 - [ ] Run eval again, remove this plan
 
