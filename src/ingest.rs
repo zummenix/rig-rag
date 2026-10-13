@@ -141,7 +141,7 @@ pub async fn run(
         chunk_ms += timers.stop();
 
         timers.start();
-        let vectors = store.embed_chunks(&batch_chunks)?;
+        let vectors = store.embed_chunks(&batch_chunks).await?;
         embed_ms += timers.stop();
         total_embeddings_count += vectors.len();
 

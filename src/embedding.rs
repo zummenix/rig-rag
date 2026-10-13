@@ -31,7 +31,7 @@ pub fn dimensions(slug: &str) -> Result<u64> {
 
 /// Embeds each of `texts` into one dense vector, in order. fastembed runs
 /// synchronously on the CPU, so this stays non-async.
-pub fn embed(model: &mut TextEmbedding, texts: Vec<&str>) -> Result<Vec<Vec<f32>>> {
+pub fn embed(model: &mut TextEmbedding, texts: Vec<String>) -> Result<Vec<Vec<f32>>> {
     model
         .embed(texts, None)
         .context("failed to embed texts with the local model")

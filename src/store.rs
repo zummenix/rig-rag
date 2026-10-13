@@ -1,5 +1,3 @@
-use std::sync::Mutex;
-
 use anyhow::{Context, Result, bail};
 use fastembed::TextEmbedding;
 use qdrant_client::{
@@ -15,6 +13,10 @@ use crate::chunk::DocChunk;
 use crate::config::Config;
 use crate::embedding;
 use crate::hashing;
+
+use tokio::sync::{mpsc, oneshot};
+
+const EMBEDDING_WORKER_QUEUE_SIZE: usize = 4;
 
 pub fn client(url: &str) -> Result<Qdrant> {
     Qdrant::from_url(url)
@@ -56,15 +58,21 @@ pub async fn list_collection_names(client: &Qdrant) -> Result<Vec<String>> {
 pub struct Store {
     client: Qdrant,
     collection: String,
-    model: Mutex<TextEmbedding>,
+    embed_tx: mpsc::Sender<EmbedRequest>,
 }
 
 impl Store {
     pub fn new(client: Qdrant, collection: String, model: TextEmbedding) -> Self {
+        let (embed_tx, embed_rx) = mpsc::channel(EMBEDDING_WORKER_QUEUE_SIZE);
+        std::thread::Builder::new()
+            .name("embedder".into())
+            .spawn(move || embedding_worker(model, embed_rx))
+            .expect("failed to spawn embedding worker");
+
         Self {
             client,
             collection,
-            model: Mutex::new(model),
+            embed_tx,
         }
     }
 
@@ -92,10 +100,9 @@ impl Store {
     }
 
     /// Embeds each chunk's text into one dense vector, in chunk order.
-    pub fn embed_chunks(&self, chunks: &[DocChunk]) -> Result<Vec<Vec<f32>>> {
-        let texts = chunks.iter().map(|chunk| chunk.text.as_str()).collect();
-        let mut model = self.model.lock().expect("embedding model lock poisoned");
-        embedding::embed(&mut model, texts)
+    pub async fn embed_chunks(&self, chunks: &[DocChunk]) -> Result<Vec<Vec<f32>>> {
+        let texts = chunks.iter().map(|chunk| chunk.text.to_owned()).collect();
+        self.embed_texts(texts).await
     }
 
     /// Upserts `(chunk, vector)` pairs, storing each chunk as its point's
@@ -137,13 +144,12 @@ impl Store {
         k: u64,
         threshold: f32,
     ) -> Result<Vec<(DocChunk, f32)>> {
-        let query_vector = {
-            let mut model = self.model.lock().expect("embedding model lock poisoned");
-            embedding::embed(&mut model, vec![question])?
-                .into_iter()
-                .next()
-                .context("embedding model returned no vector for the query")?
-        };
+        let query_vector = self
+            .embed_texts(vec![question.to_owned()])
+            .await?
+            .into_iter()
+            .next()
+            .context("embedding model returned no vector for the query")?;
 
         let response = self
             .client
@@ -167,6 +173,15 @@ impl Store {
             })
             .collect()
     }
+
+    async fn embed_texts(&self, texts: Vec<String>) -> Result<Vec<Vec<f32>>> {
+        let (reply_tx, reply_rx) = oneshot::channel();
+        self.embed_tx
+            .send(EmbedRequest::Embed { texts, reply_tx })
+            .await
+            .context("embedding worker has shut down")?;
+        reply_rx.await?
+    }
 }
 
 /// Checks a collection was built with `configured`, using the model slug baked
@@ -184,4 +199,19 @@ fn verify_model(collection: &str, configured: &str, prefix: &str) -> Result<()> 
         );
     }
     Ok(())
+}
+
+enum EmbedRequest {
+    Embed {
+        texts: Vec<String>,
+        reply_tx: oneshot::Sender<Result<Vec<Vec<f32>>>>,
+    },
+}
+
+fn embedding_worker(mut model: TextEmbedding, mut rx: mpsc::Receiver<EmbedRequest>) {
+    while let Some(EmbedRequest::Embed { texts, reply_tx }) = rx.blocking_recv() {
+        let result = embedding::embed(&mut model, texts);
+        // Ignore send errors: the caller may have timed out / been cancelled.
+        let _ = reply_tx.send(result);
+    }
 }
