@@ -1,10 +1,10 @@
 use anyhow::{Context, Result, anyhow};
 use futures::{StreamExt, future::BoxFuture};
-use rig::AgentBuilder;
-use rig::agent::MultiTurnStreamItem;
-use rig::completion::message::Message;
-use rig::providers::openrouter;
-use rig::streaming::{Item, StreamEvent};
+use rig_agent::AgentBuilder;
+use rig_agent::agent::MultiTurnStreamItem;
+use rig_core::completion::message::Message;
+use rig_core::providers::openrouter;
+use rig_core::streaming::{Item, StreamEvent};
 
 use crate::config::Config;
 use crate::retrieval;
@@ -39,7 +39,7 @@ impl Retriever for QdrantRetriever {
 
 /// [`Completer`] backed by a rig agent over OpenRouter.
 pub struct RigCompleter {
-    agent: rig::Agent,
+    agent: rig_agent::Agent,
 }
 
 impl RigCompleter {

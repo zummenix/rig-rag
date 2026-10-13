@@ -36,12 +36,13 @@ anyhow = "1.0.104"
 axum = "0.8"
 chunkedrs = "2.1.1"
 clap = { version = "4", features = ["derive"] }
-fastembed = "4.9.1"
+fastembed = "7.1"
 futures = "0.3"
 hex = "0.4"
 libc = "0.2"
 qdrant-client = "1.19"
-rig = { version = "0.44" }
+rig-agent = "0.44"
+rig-core = { version = "0.44", features = ["reqwest"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0"
 sha2 = "0.11"

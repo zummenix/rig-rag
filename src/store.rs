@@ -1,3 +1,5 @@
+use std::sync::Mutex;
+
 use anyhow::{Context, Result, bail};
 use fastembed::TextEmbedding;
 use qdrant_client::{
@@ -54,7 +56,7 @@ pub async fn list_collection_names(client: &Qdrant) -> Result<Vec<String>> {
 pub struct Store {
     client: Qdrant,
     collection: String,
-    model: TextEmbedding,
+    model: Mutex<TextEmbedding>,
 }
 
 impl Store {
@@ -62,7 +64,7 @@ impl Store {
         Self {
             client,
             collection,
-            model,
+            model: Mutex::new(model),
         }
     }
 
@@ -92,7 +94,8 @@ impl Store {
     /// Embeds each chunk's text into one dense vector, in chunk order.
     pub fn embed_chunks(&self, chunks: &[DocChunk]) -> Result<Vec<Vec<f32>>> {
         let texts = chunks.iter().map(|chunk| chunk.text.as_str()).collect();
-        embedding::embed(&self.model, texts)
+        let mut model = self.model.lock().expect("embedding model lock poisoned");
+        embedding::embed(&mut model, texts)
     }
 
     /// Upserts `(chunk, vector)` pairs, storing each chunk as its point's
@@ -134,10 +137,13 @@ impl Store {
         k: u64,
         threshold: f32,
     ) -> Result<Vec<(DocChunk, f32)>> {
-        let query_vector = embedding::embed(&self.model, vec![question])?
-            .into_iter()
-            .next()
-            .context("embedding model returned no vector for the query")?;
+        let query_vector = {
+            let mut model = self.model.lock().expect("embedding model lock poisoned");
+            embedding::embed(&mut model, vec![question])?
+                .into_iter()
+                .next()
+                .context("embedding model returned no vector for the query")?
+        };
 
         let response = self
             .client

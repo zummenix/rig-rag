@@ -1,5 +1,5 @@
 use anyhow::{Context, Result, bail};
-use fastembed::{EmbeddingModel, InitOptions, TextEmbedding};
+use fastembed::{EmbeddingModel, TextEmbedding, TextInitOptions};
 
 /// Slug of the default embedding model, as written in `rig-rag.toml`.
 pub const DEFAULT_MODEL_SLUG: &str = "bge-small-en-v1.5";
@@ -16,7 +16,7 @@ pub fn model_from_slug(slug: &str) -> Result<EmbeddingModel> {
 /// so the model identity and settings stay consistent between ingestion and
 /// retrieval.
 pub fn load_slug(slug: &str) -> Result<TextEmbedding> {
-    TextEmbedding::try_new(InitOptions::new(model_from_slug(slug)?))
+    TextEmbedding::try_new(TextInitOptions::new(model_from_slug(slug)?))
         .with_context(|| format!("failed to load embedding model {slug:?}"))
 }
 
@@ -31,7 +31,7 @@ pub fn dimensions(slug: &str) -> Result<u64> {
 
 /// Embeds each of `texts` into one dense vector, in order. fastembed runs
 /// synchronously on the CPU, so this stays non-async.
-pub fn embed(model: &TextEmbedding, texts: Vec<&str>) -> Result<Vec<Vec<f32>>> {
+pub fn embed(model: &mut TextEmbedding, texts: Vec<&str>) -> Result<Vec<Vec<f32>>> {
     model
         .embed(texts, None)
         .context("failed to embed texts with the local model")

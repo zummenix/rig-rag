@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use anyhow::Result;
-use rig::loaders::FileLoader;
+use rig_core::loaders::FileLoader;
 
 use crate::chunk::{DocChunk, chunk_md_doc};
 use crate::config::Config;

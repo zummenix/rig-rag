@@ -16,7 +16,7 @@ depend on rig's wrappers and use all new features.
 - [x] Run eval and check that we don't hit regression in query
 - [x] Remove rig's `fastembed` feature
 - [x] Remove `rig-qdrant` crate
-- [ ] Update `fastembed` to the latest version
+- [x] Update `fastembed` to the latest version
 - [ ] Run eval again, remove this plan
 
 ## Status
@@ -32,5 +32,7 @@ The spike's hybrid search was removed for now (recoverable from commit
 
 The first eval run is done. No changes to retrieval quality. The latency grew up
 a little: p95 is ~12ms vs ~10ms; Timing embed grew up: ~600s vs ~440s. Results
-weren't saved (will be saved at the last step)
+weren't saved (will be saved at the last step).
+
+Extra crates removed, `fastembed` is updated.
 
