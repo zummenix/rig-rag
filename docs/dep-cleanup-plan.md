@@ -13,7 +13,7 @@ depend on rig's wrappers and use all new features.
       they might work together
 - [x] Use knowledge after the spike to integrate `fastembed` and `qdrant-client`
       crates directly into the codebae instead of rig
-- [ ] Run eval and check that we don't hit regression in query
+- [x] Run eval and check that we don't hit regression in query
 - [ ] Remove rig's `fastembed` feature
 - [ ] Remove `rig-qdrant` crate
 - [ ] Update `fastembed` to the latest version
@@ -29,4 +29,8 @@ unnamed cosine vector) so it matches the existing collections and the baseline.
 
 The spike's hybrid search was removed for now (recoverable from commit
 `9ecb299`); re-add and eval test it separately after the dependency cleanup.
+
+The first eval run is done. No changes to retrieval quality. The latency grew up
+a little: p95 is ~12ms vs ~10ms; Timing embed grew up: ~600s vs ~440s. Results
+weren't saved (will be saved at the last step)
 
