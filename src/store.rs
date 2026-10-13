@@ -1,31 +1,23 @@
 use anyhow::{Context, Result, bail};
+use fastembed::TextEmbedding;
 use qdrant_client::{
-    Qdrant,
+    Payload, Qdrant,
     qdrant::{
-        CreateCollectionBuilder, DeleteCollectionBuilder, Distance, QueryPoints,
-        QueryPointsBuilder, VectorParamsBuilder,
+        CreateCollectionBuilder, DeleteCollectionBuilder, Distance, PointStruct, Query,
+        QueryPointsBuilder, UpsertPointsBuilder, VectorParamsBuilder,
     },
 };
-use rig_qdrant::QdrantVectorStore;
+use uuid::Uuid;
 
+use crate::chunk::DocChunk;
 use crate::config::Config;
-use crate::embedding::{self, EmbeddingModel};
+use crate::embedding;
 use crate::hashing;
 
 pub fn client(url: &str) -> Result<Qdrant> {
     Qdrant::from_url(url)
         .build()
         .with_context(|| format!("failed to create Qdrant client for {url}"))
-}
-
-pub fn query_params(collection: &str) -> QueryPoints {
-    QueryPointsBuilder::new(collection)
-        .with_payload(true)
-        .build()
-}
-
-pub fn new_store(client: Qdrant, model: EmbeddingModel, collection: &str) -> QdrantVectorStore {
-    QdrantVectorStore::new(client, model, query_params(collection))
 }
 
 pub async fn create_collection(client: &Qdrant, name: &str, dims: u64) -> Result<()> {
@@ -55,26 +47,125 @@ pub async fn list_collection_names(client: &Qdrant) -> Result<Vec<String>> {
     Ok(response.collections.into_iter().map(|c| c.name).collect())
 }
 
-/// Connects to Qdrant and returns a store bound to the collection named in the
-/// config, verifying that it exists and was built with the configured model.
-pub async fn connect(config: &Config) -> Result<QdrantVectorStore> {
-    let client = client(&config.qdrant.url)?;
-    let active = &config.collection.active;
+/// A Qdrant collection bound to the embedding model that populated it.
+///
+/// Both ingestion (embed + upsert) and retrieval (embed + query) go through one
+/// store, so the vectors compared are always produced by the same model.
+pub struct Store {
+    client: Qdrant,
+    collection: String,
+    model: TextEmbedding,
+}
 
-    if active.is_empty() {
-        bail!(
-            "no active collection configured: set [collection].active via `rig-rag promote <collection>`"
-        );
-    }
-    if !client.collection_exists(active).await? {
-        bail!(
-            "configured collection {active:?} does not exist; run `rig-rag ingest` then `rig-rag promote <collection>`, or fix [collection].active"
-        );
+impl Store {
+    pub fn new(client: Qdrant, collection: String, model: TextEmbedding) -> Self {
+        Self {
+            client,
+            collection,
+            model,
+        }
     }
 
-    verify_model(active, &config.embedding.model, &config.corpus.prefix)?;
-    let model = embedding::load_slug(&config.embedding.model)?;
-    Ok(new_store(client, model, active))
+    /// Connects to Qdrant and returns a store bound to the collection named in
+    /// the config, verifying that it exists and was built with the configured
+    /// model.
+    pub async fn connect(config: &Config) -> Result<Self> {
+        let client = client(&config.qdrant.url)?;
+        let active = &config.collection.active;
+
+        if active.is_empty() {
+            bail!(
+                "no active collection configured: set [collection].active via `rig-rag promote <collection>`"
+            );
+        }
+        if !client.collection_exists(active).await? {
+            bail!(
+                "configured collection {active:?} does not exist; run `rig-rag ingest` then `rig-rag promote <collection>`, or fix [collection].active"
+            );
+        }
+
+        verify_model(active, &config.embedding.model, &config.corpus.prefix)?;
+        let model = embedding::load_slug(&config.embedding.model)?;
+        Ok(Self::new(client, active.clone(), model))
+    }
+
+    /// Embeds each chunk's text into one dense vector, in chunk order.
+    pub fn embed_chunks(&self, chunks: &[DocChunk]) -> Result<Vec<Vec<f32>>> {
+        let texts = chunks.iter().map(|chunk| chunk.text.as_str()).collect();
+        embedding::embed(&self.model, texts)
+    }
+
+    /// Upserts `(chunk, vector)` pairs, storing each chunk as its point's
+    /// payload.
+    pub async fn insert(&self, documents: Vec<(DocChunk, Vec<f32>)>) -> Result<()> {
+        if documents.is_empty() {
+            return Ok(());
+        }
+
+        let mut points = Vec::with_capacity(documents.len());
+        for (document, vector) in documents {
+            let payload = serde_json::to_value(&document)?;
+            let payload = Payload::try_from(payload)
+                .with_context(|| format!("failed to encode chunk {:?} as a payload", document))?;
+            points.push(PointStruct::new(
+                Uuid::new_v4().to_string(),
+                vector,
+                payload,
+            ));
+        }
+
+        self.client
+            .upsert_points(UpsertPointsBuilder::new(&self.collection, points).wait(true))
+            .await
+            .with_context(|| {
+                format!(
+                    "failed to insert points into collection {:?}",
+                    self.collection
+                )
+            })
+            .map(|_| ())
+    }
+
+    /// Returns the `k` chunks nearest to `question`, best first, dropping any
+    /// whose score is below `threshold`.
+    pub async fn search(
+        &self,
+        question: &str,
+        k: u64,
+        threshold: f32,
+    ) -> Result<Vec<(DocChunk, f32)>> {
+        let query_vector = embedding::embed(&self.model, vec![question])?
+            .into_iter()
+            .next()
+            .context("embedding model returned no vector for the query")?;
+
+        let response = self
+            .client
+            .query(
+                QueryPointsBuilder::new(&self.collection)
+                    .with_payload(true)
+                    .query(Query::new_nearest(query_vector))
+                    .score_threshold(threshold)
+                    .limit(k)
+                    .build(),
+            )
+            .await
+            .with_context(|| {
+                format!(
+                    "failed to query collection {:?} for {question:?}",
+                    self.collection
+                )
+            })?;
+
+        response
+            .result
+            .into_iter()
+            .map(|point| {
+                let chunk: DocChunk = serde_json::from_value(serde_json::to_value(point.payload)?)?;
+                Ok((chunk, point.score))
+            })
+            .collect()
+    }
 }
 
 /// Checks a collection was built with `configured`, using the model slug baked
@@ -92,132 +183,4 @@ fn verify_model(collection: &str, configured: &str, prefix: &str) -> Result<()> 
         );
     }
     Ok(())
-}
-
-pub mod v2 {
-    use anyhow::{Context, Result};
-    use qdrant_client::{
-        Payload, Qdrant,
-        qdrant::{
-            CreateCollectionBuilder, Distance, DocumentBuilder, Fusion, Modifier, NamedVectors,
-            PointStruct, PrefetchQueryBuilder, QueryPointsBuilder, SparseVectorConfig,
-            SparseVectorParamsBuilder, SparseVectorsConfigBuilder, UpsertPointsBuilder,
-            VectorInput, VectorParamsBuilder, VectorsConfig, VectorsConfigBuilder,
-            vector_input::{self},
-        },
-    };
-    use uuid::Uuid;
-
-    use crate::chunk::DocChunk;
-
-    const DENSE_VECTOR_NAME: &str = "dense";
-    const SPARSE_VECTOR_NAME: &str = "sparse";
-    const SPARSE_MODEL_NAME: &str = "Qdrant/bm25";
-    const HYBRID_PREFETCH_LIMIT: u64 = 200;
-
-    pub async fn create_hybrid_collection(client: &Qdrant, name: &str, dims: u64) -> Result<()> {
-        client
-            .create_collection(
-                CreateCollectionBuilder::new(name)
-                    .vectors_config::<VectorsConfig>(
-                        VectorsConfigBuilder::default()
-                            .add_named_vector_params(
-                                DENSE_VECTOR_NAME,
-                                VectorParamsBuilder::new(dims, Distance::Cosine),
-                            )
-                            .clone()
-                            .into(),
-                    )
-                    .sparse_vectors_config::<SparseVectorConfig>(
-                        SparseVectorsConfigBuilder::default()
-                            .add_named_vector_params(
-                                SPARSE_VECTOR_NAME,
-                                SparseVectorParamsBuilder::default().modifier(Modifier::Idf),
-                            )
-                            .clone()
-                            .into(),
-                    )
-                    .build(),
-            )
-            .await
-            .with_context(|| format!("failed to create collection {name:?}"))?;
-        Ok(())
-    }
-
-    pub async fn insert_documents(
-        client: &Qdrant,
-        collection_name: &str,
-        documents: Vec<(DocChunk, Vec<f32>)>,
-    ) -> Result<()> {
-        let mut points: Vec<PointStruct> = vec![];
-
-        for (document, embeddings) in documents {
-            let json_document = serde_json::to_value(&document)?;
-            let doc_as_payload = Payload::try_from(json_document)
-                .with_context(|| String::from("failed to create payload for insertinon"))?;
-
-            let named_vectors = NamedVectors::default()
-                .add_vector(DENSE_VECTOR_NAME, embeddings)
-                .add_vector(
-                    SPARSE_VECTOR_NAME,
-                    DocumentBuilder::new(&document.text, SPARSE_MODEL_NAME).build(),
-                );
-            points.push(PointStruct::new(
-                Uuid::new_v4().to_string(),
-                named_vectors,
-                doc_as_payload,
-            ))
-        }
-
-        let request = UpsertPointsBuilder::new(collection_name, points).wait(true);
-        client
-            .upsert_points(request)
-            .await
-            .with_context(|| format!("failed to insert points into collection {collection_name}"))
-            .map(|_| ())
-    }
-
-    pub async fn query_documents(
-        client: &Qdrant,
-        collection_name: &str,
-        text_query: &str,
-        embedded_query: Vec<f32>,
-        limit: u64,
-    ) -> Result<Vec<(DocChunk, f32)>> {
-        let response = client
-            .query(
-                QueryPointsBuilder::new(collection_name)
-                    .with_payload(true)
-                    .prefetch(&[
-                        PrefetchQueryBuilder::default()
-                            .using(SPARSE_VECTOR_NAME)
-                            .limit(HYBRID_PREFETCH_LIMIT)
-                            .query(VectorInput {
-                                variant: Some(vector_input::Variant::Document(
-                                    DocumentBuilder::new(text_query, SPARSE_MODEL_NAME).build(),
-                                )),
-                            })
-                            .build(),
-                        PrefetchQueryBuilder::default()
-                            .using(DENSE_VECTOR_NAME)
-                            .limit(HYBRID_PREFETCH_LIMIT)
-                            .query(embedded_query)
-                            .build(),
-                    ])
-                    .query(Fusion::Rrf)
-                    .limit(limit)
-                    .build(),
-            )
-            .await
-            .with_context(|| {
-                format!("failed to perform query '{text_query}' on collection '{collection_name}'")
-            })?;
-
-        let mut result: Vec<(DocChunk, f32)> = vec![];
-        for item in response.result {
-            let payload = serde_json::from_value(serde_json::to_value(item.payload)?)?;
-            result.push((payload, item.score));
-        }
-        Ok(result)
-    }
 }

@@ -16,7 +16,8 @@ pub fn run(config_path: impl AsRef<Path>) -> Result<()> {
         embedding::DEFAULT_MODEL_SLUG.to_string()
     };
 
-    let model = embedding::load_slug(&slug)?;
-    println!("model={slug} dims={}", model.capabilities().ndims);
+    embedding::load_slug(&slug)?;
+    let dims = embedding::dimensions(&slug)?;
+    println!("model={slug} dims={dims}");
     Ok(())
 }

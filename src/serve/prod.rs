@@ -5,24 +5,23 @@ use rig::agent::MultiTurnStreamItem;
 use rig::completion::message::Message;
 use rig::providers::openrouter;
 use rig::streaming::{Item, StreamEvent};
-use rig_qdrant::QdrantVectorStore;
 
 use crate::config::Config;
 use crate::retrieval;
 use crate::serve::chat::PREAMBLE;
 use crate::serve::state::{ChatStream, Completer, Retriever};
-use crate::store;
+use crate::store::Store;
 use shared::{ChatEvent, DocHit, Msg, Role};
 
 /// [`Retriever`] backed by the active Qdrant collection.
 pub struct QdrantRetriever {
-    store: QdrantVectorStore,
+    store: Store,
 }
 
 impl QdrantRetriever {
     /// Connects and verifies the active collection (fails fast at startup).
     pub async fn connect(config: &Config) -> Result<Self> {
-        let store = store::connect(config).await?;
+        let store = Store::connect(config).await?;
         Ok(Self { store })
     }
 }

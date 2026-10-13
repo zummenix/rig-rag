@@ -11,22 +11,22 @@ depend on rig's wrappers and use all new features.
 
 - [x] Spike on features `fastembed` and `qdrant-client` crates provide and how
       they might work together
-- [ ] Use knowledge after the spike to integrate `fastembed` and `qdrant-client`
+- [x] Use knowledge after the spike to integrate `fastembed` and `qdrant-client`
       crates directly into the codebae instead of rig
 - [ ] Run eval and check that we don't hit regression in query
 - [ ] Remove rig's `fastembed` feature
 - [ ] Remove `rig-qdrant` crate
+- [ ] Update `fastembed` to the latest version
 - [ ] Run eval again, remove this plan
 
 ## Status
 
-The spike is done. In `src/embedding.rs` and `src/store.rs` were added temporary
-`v2` modules just to make sure that we have all functionality we need and the
-code base compiles. The code is very straight, needs refactor during integration
-stage.
+The spike is integrated. `rig`'s embedding and Qdrant wrappers are replaced by
+direct `fastembed`/`qdrant-client` calls in `src/embedding.rs`, `src/store.rs`,
+`src/retrieval.rs`, `src/ingest.rs` and `src/serve/prod.rs`; the temporary `v2`
+modules and the `rig::Embed` impl are gone. Retrieval stays dense-only (single
+unnamed cosine vector) so it matches the existing collections and the baseline.
 
-Note: that the code contains partially implemented hybrid search (this is one
-of the reasons we should use crates directly because rig's wrappers do not allow
-such agility). Refactoring is advised: remove hybrid search for now or disable
-it through a bool flag or enum. We will eval test the hybrid search in the
-future after dependency cleanup.
+The spike's hybrid search was removed for now (recoverable from commit
+`9ecb299`); re-add and eval test it separately after the dependency cleanup.
+

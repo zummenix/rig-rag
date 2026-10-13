@@ -3,9 +3,7 @@ use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use anyhow::Result;
-use rig::embeddings::EmbeddingsBuilder;
 use rig::loaders::FileLoader;
-use rig::vector_store::InsertDocuments;
 
 use crate::chunk::{DocChunk, chunk_md_doc};
 use crate::config::Config;
@@ -92,8 +90,7 @@ pub async fn run(
         println!("Collection {target} already exists; nothing to do. Use --force to rebuild.");
         stats::report_memory();
         if let Some(path) = report_path.as_deref() {
-            let model = embedding::load_slug(&config.embedding.model)?;
-            let dimensions = model.capabilities().ndims as u64;
+            let dimensions = embedding::dimensions(&config.embedding.model)?;
             write_report(&inputs, status, timers.timing(), dimensions, None, 0, path)?;
             println!("Wrote ingest report to {}", path.display());
         }
@@ -105,9 +102,9 @@ pub async fn run(
         store::delete_collection(&client, &target).await?;
     }
 
-    let model = embedding::load_slug(&config.embedding.model)?;
-    let dims = model.capabilities().ndims as u64;
+    let dims = embedding::dimensions(&config.embedding.model)?;
     store::create_collection(&client, &target, dims).await?;
+    let model = embedding::load_slug(&config.embedding.model)?;
 
     timers.start();
     let documents = load_documents(&sources, data_root)?;
@@ -125,7 +122,7 @@ pub async fn run(
     let mut chunk_ms = 0u64;
     let mut embed_ms = 0u64;
     let mut insert_ms = 0u64;
-    let vector_store = store::new_store(client, model.clone(), &target);
+    let store = store::Store::new(client, target.clone(), model);
     for documents_batch in documents.chunks(DOCUMENTS_BATCH_SIZE) {
         timers.start();
         let mut batch_chunks: Vec<DocChunk> = Vec::new();
@@ -144,15 +141,14 @@ pub async fn run(
         chunk_ms += timers.stop();
 
         timers.start();
-        let embeddings = EmbeddingsBuilder::new(model.clone())
-            .documents(batch_chunks)?
-            .build()
-            .await?;
+        let vectors = store.embed_chunks(&batch_chunks)?;
         embed_ms += timers.stop();
-        total_embeddings_count += embeddings.len();
+        total_embeddings_count += vectors.len();
 
         timers.start();
-        vector_store.insert_documents(embeddings).await?;
+        store
+            .insert(batch_chunks.into_iter().zip(vectors).collect())
+            .await?;
         insert_ms += timers.stop();
     }
     timers.chunk = chunk_ms;
