@@ -156,12 +156,7 @@ impl Store {
                     .build(),
             )
             .await
-            .with_context(|| {
-                format!(
-                    "failed to query collection {:?} for {question:?}",
-                    self.collection
-                )
-            })?;
+            .with_context(|| format!("failed to query collection {:?}", self.collection))?;
 
         response
             .result
