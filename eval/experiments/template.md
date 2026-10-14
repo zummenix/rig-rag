@@ -1,10 +1,10 @@
 # Experiment: <short title> (`<experiment_id>`)
 
 <!--
-Copy this file to eval/experiments/<experiment_id>.md and fill it in. Flags,
-profiles, metrics, and the committed contracts are documented in
-[`../README.md`](../README.md); the [Checklist](#checklist) below tracks the
-process and is deleted once the record is final. This template fixes only the
+Copy this file to eval/experiments/<experiment_id>.md and fill it in.
+Flags, profiles, metrics, and the committed contracts are documented in
+[`../README.md`](../README.md) (see Experiment lifecycle); the four stage
+comments below and that section are the process. This template fixes only the
 shape of the record.
 
 Keep `<experiment_id>` identical everywhere it appears: the `--experiment`
@@ -17,85 +17,12 @@ rather than guessing.
 
 The record has four stages, in order. Work them strictly one at a time, each as
 its own commit, and do not start a stage while an earlier one is uncommitted:
-  1. Hypothesis           — what you expect and why. Write and commit this
-                            before any system code exists; the record is the
-                            only file that changes.
-  2. Controlled change    — the system commit that tests it, isolated so the
-                            docs survive a revert. System code only: never the
-                            record, the runner, the framework, or the render
-                            package.
-  3. Interpretation       — the measured results (## Results) and what they mean
-                            (## Interpretation). Nothing here is written before
-                            the arms are run.
-  4. Decision             — adopt the change, or revert only the code.
+  1. Hypothesis
+  2. Controlled change
+  3. Interpretation
+  4. Decision
 ## Caveats and ## Reproduction are supporting sections, not stages.
 -->
-
-## Checklist
-
-<!--
-Working aid — work this top to bottom, then delete the whole section at the last
-step (once the Decision is recorded), so the final record holds only the four
-stages. See eval/README.md for flags, profiles, metrics, and contracts.
--->
-
-**Stage 1 — Hypothesis (record only; no system code).**
-- [ ] Satisfy `eval/README.md`'s Requirements (Qdrant reachable at the profile's
-      URL, `OPENROUTER_API_KEY`/`OPENROUTER_MODEL_NAME`, Python 3.11+, `git`).
-- [ ] Fill in **only** the Hypothesis and Status sections: name the knob, the
-      metric(s) it should move, the direction, and what would falsify it. Do
-      **not** edit system code in this stage.
-- [ ] Commit this hypothesis-only record on its own (a docs-only commit), so the
-      prediction is fixed before the code that tests it exists.
-
-**Stage 2 — Controlled change (system code only).**
-- [ ] Make the controlled change in **one commit** that touches only system
-      code — never the harness (this record, the runner, the framework) and
-      never the render package. Work from a clean tree and push it: the runner
-      attributes a run to `HEAD` and refuses uncommitted tracked changes and
-      unpushed commits. (`--allow-dirty` skips the clean-tree check **only**;
-      the pushed-commit check still applies, and the recorded commit no longer
-      describes what was measured.)
-- [ ] Fill in the Controlled change section: the arm table and the treatment
-      commit SHA. Leave Results, Interpretation, Decision, and Caveats empty
-      until stage 3.
-- [ ] Confirm a baseline exists under the same profile definitions, pinned source
-      revisions, and embedding model; if not, re-record one and pin it by path.
-- [ ] Fix `--profiles`, `--k`, `--latency-k`, `--warmup`, and `--reps` now, and
-      carry those pinned values into every `eval-run` below.
-
-**Stage 3 — Interpretation (measure, then explain).**
-- [ ] If re-recording a baseline: check out the baseline commit (normally the
-      treatment commit's parent), then run `just eval-run --experiment baseline
-      --force-ingest` plus your pinned flags; record its commit SHA and run id.
-- [ ] Return to `<treatment_commit_sha>`, then run `just eval-run --experiment
-      <experiment_id> --force-ingest` plus your pinned flags; record its run id.
-- [ ] Run both arms on the same profiles/pins/model. `promote` rewrites
-      `[collection].active` in the profile `rig-rag.toml`; with unchanged
-      pins/model that value is stable, so the tree normally stays clean.
-- [ ] `<run_id>` is the UTC-timestamp directory the runner prints (e.g.
-      `2026-10-10T15-58-51Z`).
-- [ ] Fill **Results** and **Interpretation** only from what was measured.
-
-**Stage 4 — Decision (record and land).**
-- [ ] Fill **Decision** and **Caveats**.
-- [ ] Add a row to the [Experiments](../README.md#experiments) table.
-- [ ] Create `eval/experiments/<experiment_id>/{__init__.py,report.py}` (pin
-      this record's baseline run by path) so `just eval-report <experiment_id>`
-      renders.
-- [ ] Commit the artifacts: `results.json`, `ingest-*.json`, and this `.md`.
-      `hits.jsonl`, `serve-*.log`, and `eval/reports/*.html` stay gitignored —
-      the HTML report is regenerated from the committed input
-      (`just eval-report <experiment_id>`).
-- [ ] Push the commit that lands the results (and the measured commits), so the
-      record and its runs stay reachable from a clean clone.
-- [ ] Reuse the `Eval-Experiment:` / `Eval-Commit:` trailer the runner prints on
-      the commit that lands the results, so a git-only reader can trace the run.
-- [ ] Adopted: keep the treatment commit on the main line.
-- [ ] Rejected: revert **only the code** in a new commit — the measured commit
-      stays in history, so the hash remains reproducible while the eval docs
-      persist.
-- [ ] **Delete this Checklist section** — the record is now final.
 
 **Hypothesis.** <The predicted effect, in one or two sentences. Name the
 metric(s) it should move and the direction, and what would falsify it.>
@@ -213,11 +140,11 @@ Rationale must be about the evidence, not a restatement of the hypothesis.
 ## Reproduction
 
 <!--
-Important: once a rejected experiment's code is reverted at HEAD, the
-`--experiment` flag can no longer select the old behavior. Each arm must then be
-built from its pinned commit; the runner attributes a run to whatever `HEAD` is
-checked out, so check out the measured commit before `eval-run`. Both commits
-must be reachable from pushed refs (the runner's provenance check requires it).
+Important: once a rejected experiment's code is reverted, the `--experiment` flag
+can no longer select the old behavior. Each arm must then be built from its
+pinned commit, so check that commit out before `eval-run`. The runner records a
+best-effort revision and does not require a clean or pushed tree, so the commits
+in these commands are the human-facing provenance — keep them accurate.
 
 `just eval-report` looks up `eval/experiments/<experiment_id>/report.py`. Note
 that `eval-run` only creates the *data* directory `eval/results/<experiment_id>/`;
@@ -236,7 +163,7 @@ Add a row to eval/README.md's Experiments table for discoverability.
 -->
 
 ```sh
-# baseline arm — the flags shown are the defaults; use the values you pinned in Set up
+# baseline arm — the flags shown are the defaults; use the values you pinned in stage 2
 git checkout <baseline_commit_sha>
 just eval-run --experiment baseline --force-ingest \
   --profiles single-project,multi-project \

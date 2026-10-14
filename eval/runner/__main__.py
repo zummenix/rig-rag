@@ -65,14 +65,6 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
-        "--allow-dirty",
-        action="store_true",
-        help=(
-            "measure a work tree with uncommitted tracked changes; the recorded "
-            "commit then does not capture what was measured"
-        ),
-    )
-    parser.add_argument(
         "--k",
         type=_parse_k,
         default=K_VALUES,
@@ -139,7 +131,6 @@ def main(argv: list[str] | None = None) -> int:
         profiles=selected,
         skip_ingest=args.skip_ingest,
         force_ingest=args.force_ingest,
-        allow_dirty=args.allow_dirty,
         binary=args.bin,
         k_values=k_values,
         warmup=args.warmup,
