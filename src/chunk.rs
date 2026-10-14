@@ -33,16 +33,6 @@ impl DocChunk {
     }
 }
 
-impl rig::Embed for DocChunk {
-    fn embed(
-        &self,
-        embedder: &mut rig::embeddings::TextEmbedder,
-    ) -> std::prelude::v1::Result<(), rig::embeddings::EmbedError> {
-        embedder.embed(self.text.clone());
-        Ok(())
-    }
-}
-
 /// Splits document into chunks.
 pub fn chunk_md_doc(path: &Path, doc: &str) -> Vec<DocChunk> {
     let doc = Document::new(doc);
