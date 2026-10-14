@@ -13,8 +13,8 @@ Layout (v1):
   "experiment": "<id>",
   "run": "2026-10-10T12-00-00Z",     // also the run directory name
   "started_at": "2026-10-10T12:00:00Z",
-  "commit": "<git commit SHA>",
-  "commit_ref": "origin/main",       // pushed remote ref containing `commit`
+  "commit": "<git commit SHA>",      // best-effort; "" when git is unavailable
+  "commit_ref": "origin/main",       // best-effort pushed ref containing `commit`; "" when none
   "config": { "<profile>": { "rig-rag.toml": {...}, "sources.json": [...] } },
   "environment": { "os", "arch", "python", "binary", "binary_sha256", "qdrant_url" },
   "k_values": [1, 3, 5, 7, 10, 20],   // the swept k set (default = contract grid)
@@ -41,6 +41,11 @@ The swept `k` set is recorded in `k_values` and defaults to the contract grid
 `k` used for a metric label (`recall@k`, `purity@k`, the unanswerable no-hit
 rate) comes from that recorded set, and `latency_k` — recorded per profile in
 `latency.latency_k` — must be one of the swept values.
+
+`commit`/`commit_ref` are best-effort breadcrumbs. The runner does not require a
+clean or pushed work tree (jj working-copy commits, detached `HEAD`s, and dirty
+trees are all measurable), so the record's `## Reproduction` — not `results.json`
+— carries the human-facing provenance.
 """
 
 from __future__ import annotations

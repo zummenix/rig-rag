@@ -34,7 +34,6 @@ class RunOptions:
     profiles: list[str] | None = None
     skip_ingest: bool = False
     force_ingest: bool = False
-    allow_dirty: bool = False
     binary: str | None = None
     k_values: tuple[int, ...] = K_VALUES
     warmup: int = 3
@@ -55,32 +54,29 @@ def _git(repo_root: Path, *args: str) -> str:
     return result.stdout.strip()
 
 
-def require_clean_tree(repo_root: Path) -> None:
-    """Rejects a work tree with uncommitted tracked changes.
+def _git_optional(repo_root: Path, *args: str) -> str | None:
+    """Best-effort `git`; `None` when git is unavailable or the command fails."""
 
-    The run is attributed to `HEAD`, so uncommitted tracked changes would make
-    that attribution wrong. Untracked files are ignored, so this run's own
-    outputs (e.g. `eval/results/**` before it is committed) do not force a commit
-    between runs.
+    try:
+        return _git(repo_root, *args)
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return None
+
+
+def measured_revision(repo_root: Path) -> tuple[str, str]:
+    """Best-effort `(commit, remote_ref)`; never fails on repository state.
+
+    The runner measures whatever the work tree holds, so jj working-copy
+    commits, a detached `HEAD`, and a dirty tree are all fine. `commit` is the
+    git revision when one can be read; `remote_ref` is the pushed ref containing
+    it, or `""`. Both are a breadcrumb, not a contract: the record's
+    `## Reproduction` is the human-facing provenance.
     """
 
-    status = _git(repo_root, "status", "--porcelain", "--untracked-files=no")
-    if status:
-        raise RuntimeError(
-            "work tree has uncommitted tracked changes; commit or stash them "
-            "(or pass --allow-dirty) before measuring:\n" + status
-        )
-
-
-def require_pushed_commit(repo_root: Path, commit: str) -> str:
-    """The pushed remote ref containing `commit`, or an error.
-
-    A measured commit must stay reachable from a clean clone, so it has to be
-    contained by a ref under `refs/remotes/*` (i.e. already pushed). Tags and
-    bookmarks are deliberately not created: they are easy to forget to push.
-    """
-
-    raw = _git(
+    commit = _git_optional(repo_root, "rev-parse", "HEAD") or ""
+    if not commit:
+        return "", ""
+    raw = _git_optional(
         repo_root,
         "for-each-ref",
         "--contains",
@@ -88,22 +84,22 @@ def require_pushed_commit(repo_root: Path, commit: str) -> str:
         "--format=%(refname)",
         "refs/remotes",
     )
-    refs = [ref for ref in raw.splitlines() if ref and not ref.endswith("/HEAD")]
-    if not refs:
-        raise RuntimeError(
-            f"commit {commit} is not contained by any pushed remote ref; push it "
-            "(e.g. `git push` or `jj git push`) before measuring"
-        )
-    return refs[0].removeprefix("refs/remotes/")
+    refs = [ref for ref in (raw or "").splitlines() if ref and not ref.endswith("/HEAD")]
+    return commit, refs[0].removeprefix("refs/remotes/") if refs else ""
 
 
-def measured_commit(repo_root: Path, allow_dirty: bool) -> tuple[str, str]:
-    """The `(commit, remote_ref)` a run is measured at, after provenance checks."""
+def uncommitted_tracked_changes(repo_root: Path) -> list[str]:
+    """Tracked paths with uncommitted changes, for the run-time breadcrumb.
 
-    if not allow_dirty:
-        require_clean_tree(repo_root)
-    commit = _git(repo_root, "rev-parse", "HEAD")
-    return commit, require_pushed_commit(repo_root, commit)
+    Uses `git diff HEAD --name-only` (staged + unstaged, untracked excluded)
+    rather than `git status --porcelain`: the status format's leading field is
+    whitespace-sensitive, which a stripped command output would corrupt.
+    """
+
+    names = _git_optional(repo_root, "diff", "HEAD", "--name-only")
+    if not names:
+        return []
+    return [line for line in names.splitlines() if line]
 
 
 def _environment(binary: Path, qdrant_url: str, repo_root: Path) -> dict:
@@ -220,7 +216,7 @@ def load_run_inputs(repo_root: Path, selected: list[str] | None) -> tuple[list[P
 
 def run(options: RunOptions) -> Path:
     repo_root = Path(options.repo_root)
-    commit, commit_ref = measured_commit(repo_root, options.allow_dirty)
+    commit, commit_ref = measured_revision(repo_root)
     run_id = results_mod.utc_run_id()
     started_at = results_mod.utc_timestamp()
     run_dir = repo_root / RESULTS_DIR / options.experiment / run_id
@@ -229,7 +225,17 @@ def run(options: RunOptions) -> Path:
     binary = resolve_binary(repo_root, options.binary)
     rig = RigRag(binary, repo_root)
     print(f"rig-rag binary: {binary}")
-    print(f"commit: {commit} ({commit_ref})")
+    print(f"commit: {commit or '<none>'} ({commit_ref or 'no pushed ref'})")
+    changed = uncommitted_tracked_changes(repo_root)
+    if changed:
+        print(
+            f"warning: {len(changed)} uncommitted tracked path(s) at run time; the "
+            "recorded commit does not capture them:"
+        )
+        for path in changed[:10]:
+            print(f"  {path}")
+        if len(changed) > 10:
+            print(f"  … and {len(changed) - 10} more")
     print(f"run directory: {run_dir}")
 
     profiles, questions = load_run_inputs(repo_root, options.profiles)
@@ -299,9 +305,8 @@ def run(options: RunOptions) -> Path:
     results_path = results_mod.write_results(run_dir, results)
     print(f"\nwrote {results_path}")
     print(f"wrote {hits_path}")
-    print(
-        "\nsuggested report-commit trailer:\n"
-        f"Eval-Experiment: {options.experiment}\n"
-        f"Eval-Commit: {commit}"
-    )
+    trailer = f"Eval-Experiment: {options.experiment}"
+    if commit:
+        trailer += f"\nEval-Commit: {commit}"
+    print(f"\nsuggested report-commit trailer:\n{trailer}")
     return run_dir

@@ -10,10 +10,11 @@ chat) can be compared against a baseline.
 Guiding principles: **measure the real system** (profiles are pairs of the
 existing `rig-rag.toml` + `sources.json`, and eval drives the actual
 ingest/serve code paths); **instrumentation is opt-in** (tokenizer and per-phase
-timing run only under `--report`); **reproducible from a commit** (corpus sources
-are pinned to SHAs, and a run records the commit it was measured at); and
-**versioned, tested contracts** (the results and ingest schemas ship with
-committed fixtures, so any earlier experiment stays renderable).
+timing run only under `--report`); **reproducible from a recorded revision**
+(corpus sources are pinned to SHAs, and a run records the revision it was
+measured at, best effort — the experiment record carries the human-facing
+story); and **versioned, tested contracts** (the results and ingest schemas ship
+with committed fixtures, so any earlier experiment stays renderable).
 
 Layout:
 
@@ -59,10 +60,6 @@ the reference run (no record document — just the committed runs and its
   no third-party packages.
 - A running Qdrant reachable at the profile's `[qdrant].url`.
 - `git` on `PATH` (profiles pin corpus sources to commit SHAs).
-- A clean work tree whose `HEAD` is contained by a pushed remote ref: the runner
-  refuses uncommitted tracked changes and unpushed commits so the recorded
-  `commit` stays reproducible. `--allow-dirty` skips the clean-tree check for
-  ad-hoc runs.
 - `OPENROUTER_API_KEY` and `OPENROUTER_MODEL_NAME` in the environment: `serve`
   boots the chat agent at startup even though `/api/query` needs no LLM, so the
   retrieval harness currently inherits that requirement.
@@ -138,9 +135,10 @@ docs). Build the multi-project set first; the single-project set is its
 Per run under `eval/results/<experiment>/<run>/`:
 
 - `results.json` — the versioned render input (schema in
-  `eval/runner/results.py`). Committed as an artifact. It records the measured
-  `commit` and the pushed `commit_ref` containing it, plus an `environment` block
-  whose `binary` is repo-relative with its `binary_sha256`.
+  `eval/runner/results.py`). Committed as an artifact. It records a best-effort
+  `commit` and `commit_ref` (empty when git is unavailable or the revision is
+  unpushed), plus an `environment` block whose `binary` is repo-relative with its
+  `binary_sha256`.
 - `hits.jsonl` — one JSON object per returned hit (profile, question, k, rank,
   score, source, path, lines, chunk text) for offline analysis.
 - `ingest-<profile>.json` — the Rust `ingest --report` document.
@@ -181,9 +179,9 @@ Notes:
 `eval/report/framework/` turns one run's committed parts into one self-contained
 HTML document (inline CSS + SVG, no scripts, fonts, or network): a retrieval part
 (`results.json`) and one ingestion part per profile (`ingest-<profile>.json`).
-The report covers provenance (commit + pushed ref + environment), a per-profile
-summary, mean recall@k with a per-question breakdown, latency, and cross-corpus
-degradation deltas.
+The report covers provenance (commit + ref when available + environment), a
+per-profile summary, mean recall@k with a per-question breakdown, latency, and
+cross-corpus degradation deltas.
 
 ```sh
 just eval-report baseline     # newest baseline run → eval/reports/baseline.html
@@ -212,13 +210,12 @@ no contract change, and either run stays independently renderable.
 ## Experiment lifecycle
 
 An experiment is a controlled code change measured against the committed
-baseline. The runner records the **git commit SHA** (`git rev-parse HEAD`), not
-a jj change-id, so a git-only reader can check out the exact measured code.
+baseline. The runner records a **best-effort git revision** (`git rev-parse
+HEAD`) as a breadcrumb;
 
 Start from [`experiments/template.md`](experiments/template.md): it lays out the
 record's four stages (hypothesis, controlled change, interpretation, decision)
-and carries a copy-and-follow checklist covering the whole process — copy the
-template, work the checklist, then delete it once the Decision is recorded.
+and fixes only the shape of the record — the steps below are the process.
 
 Work the four stages strictly in order, each as its own commit, and do not start
 a stage while an earlier one is uncommitted:
@@ -229,20 +226,28 @@ a stage while an earlier one is uncommitted:
    prediction is fixed before the code that tests it exists.
 2. **Controlled change.** Make the controlled change in **one commit** that
    touches only system code, never the harness (the record, the runner, the
-   framework) or the render package, from a clean pushed tree. Fill the record's
-   Controlled change section (arm table + treatment commit SHA).
-3. **Interpretation.** Run the arms with identical profile definitions, source
-   revisions, model, and pinned runner settings (`just eval-run --experiment
-   <id> --force-ingest`, plus a baseline arm if no matching baseline exists),
-   then fill the record's Results and Interpretation **from what was measured**,
-   plus the profile `sources.json` / `rig-rag.toml` used.
+   framework) or the render package. Pin `--profiles`, `--k`, `--latency-k`,
+   `--warmup`, and `--reps`, and confirm a baseline exists under the same
+   profile definitions, pinned source revisions, and model — else re-record one
+   and pin it by path.
+3. **Interpretation.** Run the treatment arm with the same profile definitions,
+   source revisions, model, and pinned runner settings as the baseline (`just
+   eval-run --experiment <id> --force-ingest`). Create the render package
+   `eval/experiments/<id>/report.py` (`__init__.py` + `report.py`), pin it
+   to that baseline run, and render `just eval-report <id>` — the report's
+   comparison section is what you analyze. Then fill the record's Controlled
+   change section (arm table: revision, run ids, pinned flags), Results, and
+   Interpretation **from what was measured**, plus the profile `sources.json` /
+   `rig-rag.toml` used; commit the results JSON, the ingest reports, the render
+   package, and the record, reusing the `Eval-Experiment:` / `Eval-Commit:`
+   trailer the runner prints (its `Eval-Commit` matches `results.json`'s
+   `commit`).
 4. **Decision.** Fill Decision and Caveats, add the [Experiments](#experiments)
-   row, create `eval/experiments/<id>/report.py`, and commit the results JSON,
-   the ingest reports, and the record; the HTML report is regenerated from the
-   committed input (`just eval-report <id>`) and is **not** committed. If the
-   experiment is unsuccessful, revert **only the code** in a new commit — the
-   measured commit stays in history, so the hash remains reproducible while the
-   eval docs persist.
+   row, and commit the finalized record; the HTML report is regenerated from the
+   committed input (`just eval-report <id>`) and is **not** committed. Push.
+   If the experiment is unsuccessful, revert **only the code** in a new commit —
+   the measured commit stays in history, so the hash remains reproducible while
+   the eval docs persist.
 
 Each `eval/experiments/<id>/report.py` renders that experiment's newest committed
 run; the recorded experiments are listed under [Experiments](#experiments).
@@ -293,12 +298,6 @@ keeping:
   (`hits.jsonl`, `serve-*.log`) are kept per-run and gitignored, while
   `results.json` (and `ingest-*.json`) are the committed artifacts — keep them
   small.
-- **Running from the treatment commit.** The record's own edits dirty the tree,
-  so a clean `eval-run` needs them committed — but that advances `HEAD` past the
-  treatment commit (a docs commit), so the runner records *that* commit instead
-  of the code change. Run each arm from a detached checkout of its pinned
-  commit, or a separate `git worktree`, so `results.json`'s `commit` is the
-  treatment commit.
 
 ## Tests
 
