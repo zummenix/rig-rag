@@ -3,8 +3,10 @@ use fastembed::TextEmbedding;
 use qdrant_client::{
     Payload, Qdrant,
     qdrant::{
-        CreateCollectionBuilder, DeleteCollectionBuilder, Distance, PointStruct, Query,
-        QueryPointsBuilder, UpsertPointsBuilder, VectorParamsBuilder,
+        CreateCollectionBuilder, DeleteCollectionBuilder, Distance, DocumentBuilder, Modifier,
+        NamedVectors, PointStruct, PrefetchQueryBuilder, Query, QueryPointsBuilder, Rrf,
+        SparseVectorParamsBuilder, SparseVectorsConfigBuilder, UpsertPointsBuilder,
+        VectorParamsBuilder, VectorsConfigBuilder,
     },
 };
 use uuid::Uuid;
@@ -18,6 +20,21 @@ use tokio::sync::{mpsc, oneshot};
 
 const EMBEDDING_WORKER_QUEUE_SIZE: usize = 4;
 
+/// Named vectors of the hybrid collection: the dense BGE embedding plus a
+/// server-side BM25 sparse vector, fused at query time.
+const DENSE_VECTOR_NAME: &str = "dense";
+const SPARSE_VECTOR_NAME: &str = "sparse";
+/// Qdrant's built-in BM25 model, applied by the server (no local sparse model).
+const SPARSE_MODEL_NAME: &str = "Qdrant/bm25";
+/// Candidates pulled from each prefetch before fusion.
+const HYBRID_PREFETCH_LIMIT: u64 = 50;
+/// Reciprocal Rank Fusion parameters: the rank constant and the per-prefetch
+/// weights in prefetch order (`[sparse, dense]`). Higher weight gives more
+/// influence on the final ranking.
+const RRF_K: u32 = 2;
+const SPARSE_WEIGHT: f32 = 2.0;
+const DENSE_WEIGHT: f32 = 1.0;
+
 pub fn client(url: &str) -> Result<Qdrant> {
     Qdrant::from_url(url)
         .build()
@@ -25,10 +42,22 @@ pub fn client(url: &str) -> Result<Qdrant> {
 }
 
 pub async fn create_collection(client: &Qdrant, name: &str, dims: u64) -> Result<()> {
+    let mut vectors = VectorsConfigBuilder::default();
+    vectors.add_named_vector_params(
+        DENSE_VECTOR_NAME,
+        VectorParamsBuilder::new(dims, Distance::Cosine),
+    );
+    let mut sparse = SparseVectorsConfigBuilder::default();
+    sparse.add_named_vector_params(
+        SPARSE_VECTOR_NAME,
+        SparseVectorParamsBuilder::default().modifier(Modifier::Idf),
+    );
+
     client
         .create_collection(
             CreateCollectionBuilder::new(name)
-                .vectors_config(VectorParamsBuilder::new(dims, Distance::Cosine)),
+                .vectors_config(vectors)
+                .sparse_vectors_config(sparse),
         )
         .await
         .with_context(|| format!("failed to create collection {name:?}"))?;
@@ -105,8 +134,8 @@ impl Store {
         self.embed_texts(texts).await
     }
 
-    /// Upserts `(chunk, vector)` pairs, storing each chunk as its point's
-    /// payload.
+    /// Upserts `(chunk, dense vector)` pairs, storing each chunk as its point's
+    /// payload and its text as a server-side BM25 sparse vector.
     pub async fn insert(&self, documents: Vec<(DocChunk, Vec<f32>)>) -> Result<()> {
         if documents.is_empty() {
             return Ok(());
@@ -117,9 +146,15 @@ impl Store {
             let payload = serde_json::to_value(&document)?;
             let payload = Payload::try_from(payload)
                 .with_context(|| format!("failed to encode chunk {:?} as a payload", document))?;
+            let vectors = NamedVectors::default()
+                .add_vector(DENSE_VECTOR_NAME, vector)
+                .add_vector(
+                    SPARSE_VECTOR_NAME,
+                    DocumentBuilder::new(&document.text, SPARSE_MODEL_NAME).build(),
+                );
             points.push(PointStruct::new(
                 Uuid::new_v4().to_string(),
-                vector,
+                vectors,
                 payload,
             ));
         }
@@ -136,8 +171,9 @@ impl Store {
             .map(|_| ())
     }
 
-    /// Returns the `k` chunks nearest to `question`, best first, dropping any
-    /// whose score is below `threshold`.
+    /// Returns the `k` chunks most relevant to `question`, best first, by
+    /// fusing a BM25 sparse prefetch and a dense prefetch with Reciprocal Rank
+    /// Fusion; drops any fused hit whose RRF score is below `threshold`.
     pub async fn search(
         &self,
         question: &str,
@@ -151,12 +187,28 @@ impl Store {
             .next()
             .context("embedding model returned no vector for the query")?;
 
+        let sparse = PrefetchQueryBuilder::default()
+            .using(SPARSE_VECTOR_NAME)
+            .query(Query::new_nearest(
+                DocumentBuilder::new(question, SPARSE_MODEL_NAME).build(),
+            ))
+            .limit(HYBRID_PREFETCH_LIMIT);
+        let dense = PrefetchQueryBuilder::default()
+            .using(DENSE_VECTOR_NAME)
+            .query(Query::new_nearest(query_vector))
+            .limit(HYBRID_PREFETCH_LIMIT);
+
         let response = self
             .client
             .query(
                 QueryPointsBuilder::new(&self.collection)
                     .with_payload(true)
-                    .query(Query::new_nearest(query_vector))
+                    .add_prefetch(sparse)
+                    .add_prefetch(dense)
+                    .query(Query::new_rrf(Rrf {
+                        k: Some(RRF_K),
+                        weights: vec![SPARSE_WEIGHT, DENSE_WEIGHT],
+                    }))
                     .score_threshold(threshold)
                     .limit(k)
                     .build(),

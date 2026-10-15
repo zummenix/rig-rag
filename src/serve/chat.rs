@@ -11,7 +11,7 @@ use axum::{
 use futures::StreamExt;
 use shared::{ChatEvent, ChatRequest, DocHit, Msg};
 
-use crate::retrieval::THRESHOLD;
+use crate::retrieval::RRF_FLOOR;
 use crate::serve::{internal_error, state::AppState};
 
 /// Number of most recent transcript messages forwarded to the model. The client
@@ -62,7 +62,7 @@ pub fn build_prompt(question: &str, docs: &[DocHit]) -> String {
 pub async fn handler(State(state): State<AppState>, Json(request): Json<ChatRequest>) -> Response {
     let docs = match state
         .retriever
-        .retrieve(&request.prompt, shared::DEFAULT_K, THRESHOLD)
+        .retrieve(&request.prompt, shared::DEFAULT_K, RRF_FLOOR)
         .await
     {
         Ok(docs) => docs,
