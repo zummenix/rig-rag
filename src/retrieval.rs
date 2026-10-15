@@ -3,8 +3,12 @@ use anyhow::Result;
 use crate::store::Store;
 use shared::DocHit;
 
-/// Fixed similarity threshold below which hits are discarded.
-pub const THRESHOLD: f32 = 0.5;
+/// Fused-RRF floor below which hits are discarded.
+///
+/// Qdrant's RRF score is rank-based (`Σ 1/(rank+2)`), not a similarity, so this
+/// is a scale-free floor on fusion rank rather than a cosine cutoff. `0.0`
+/// disables it, returning the top `k` of the fusion.
+pub const RRF_FLOOR: f32 = 0.0;
 
 /// Retrieves the chunks most similar to `question`, most similar first.
 ///

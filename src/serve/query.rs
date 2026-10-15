@@ -5,7 +5,7 @@ use axum::{
 };
 use shared::QueryRequest;
 
-use crate::retrieval::THRESHOLD;
+use crate::retrieval::RRF_FLOOR;
 use crate::serve::{internal_error, state::AppState};
 
 /// `POST /api/query` — clamp `k`, retrieve, return hits (possibly empty).
@@ -14,7 +14,7 @@ pub async fn handler(State(state): State<AppState>, Json(request): Json<QueryReq
 
     match state
         .retriever
-        .retrieve(&request.question, k, THRESHOLD)
+        .retrieve(&request.question, k, RRF_FLOOR)
         .await
     {
         Ok(hits) => Json(hits).into_response(),

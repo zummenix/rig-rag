@@ -48,6 +48,7 @@ flag lists, run `just eval-run-help` and `just eval-report-help`.
 | --- | --- |
 | [Drop small chunks](experiments/drop_small_chunks.md) | **Rejected** (not adopted) — a small, corpus-skewed ingest-cost win (−4.5% multi-project embeddings, almost all `podman` fragments) that the question suite is too weak to certify as recall-safe |
 | [Bound chunk size to the embedding window](experiments/chunk_max_tokens.md) | **Rejected** (not adopted) — capping chunks at 384 `o200k_base` tokens fixed BGE-window truncation mechanically but regressed `jj-new-change` (rank 1 → beyond k=10); MRR down and cost up |
+| [Hybrid dense + BM25 retrieval](experiments/hybrid_search.md) | **Adopted** — fusing a server-side BM25 sparse vector with the dense BGE vector by weighted RRF lifted multi-project `recall@20` 0.333 → 0.833 (`recall@3` 0.167 → 0.500) with single-project unchanged, at ~1.5 ms p50 and ~2× insert; the negative-control `no_hit` falls to 0 and the weights were tuned on the suite (both recorded as caveats) |
 
 Each experiment is an `eval/experiments/<id>.md` record plus a run under
 `eval/results/<id>/`; add a row here when a new one lands. The `baseline` id is
