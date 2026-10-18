@@ -26,6 +26,8 @@ NOTES = (
     "Ingest cost is not measured in either arm (both reused existing "
     "collections); reranking is query-time only. The question set is 8 single "
     "/ 16 multi answerable, so small movements are not certified.",
+    "Decision: not adopted. The quality movement is mixed and the ~1.7 s p50 "
+    "cost is disqualifying; the code is reverted and the results remain.",
 )
 
 

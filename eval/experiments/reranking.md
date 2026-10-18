@@ -13,9 +13,9 @@ Ingest is unaffected (reranking is query-time only). Falsified by no movement
 in `recall@k`/`MRR`, by an answerable-question regression, or by a gain too
 small to justify the added latency and model footprint.
 
-**Status:** measured, pending decision — reranking moved a few gold chunks
-into the top 20 but regressed multi-project `recall@7`/`recall@10` and cost
-~1.7 s per query (≈180–190×).
+**Status:** rejected (not adopted) — reranking helped single-project recall
+only at `k≥10`, regressed multi-project `recall@7`/`recall@10`, and cost ~1.7 s
+per query; the code is reverted and the record/results remain.
 
 ## Controlled change
 
@@ -133,4 +133,87 @@ question loses source purity. Over the shared `jj` questions the single→multi
   each chunk at 512 tokens, so long chunks can lose the evidence that made them
   relevant. The negative controls still return hits (`no_hit` 0): the fused
   `threshold` remains 0.0 and reranking adds no relevance cutoff.
+
+## Decision
+
+**Not adopted.** Reranking is reverted; the measured commit `994b615a` stays in
+history, and this record plus the committed results remain for reproducibility.
+
+- **Quality is mixed, not a win.** Multi-project `recall@7` and `recall@10`
+  regress (`0.313 → 0.250`, `0.375 → 0.313`) and `recall@20` is flat. The
+  single-project gain exists only at `k=10`/`k=20`, while the default retrieval
+  depth (`k=7`, used by chat and `/api/query` when `k` is absent) sees no recall
+  gain and only `+0.006` MRR. The small aggregate improvements come from a
+  handful of questions, and they are offset by demotions of previously found
+  golds on multi-project.
+- **Latency is disqualifying.** p50 rises from ~9 ms to ~1.72 s (183–192×) and
+  p95 to ~1.78 s. That is two orders of magnitude, not the one order the
+  hypothesis allowed, and it dominates the retrieval budget before the LLM
+  call. Reranking all 50 candidates synchronously on CPU is the cause; the
+  151 MB model is only smaller than v2-m3, not faster.
+- **The falsification condition is met.** The hypothesis required a gain large
+  enough to justify the latency and footprint. The measured quality movement is
+  small, regresses the default-depth multi-project metrics, and does not
+  improve the default `k`.
+- **What would change the decision.** A much faster reranker (int8/quantized,
+  GPU, or a smaller candidate pool) that keeps p50 within an interactive
+  budget, or a reranker whose cross-encoder ordering clearly beats RRF at
+  `k≤7`. Re-run this suite before adopting; re-applying the code is cheap
+  because `994b615a` is a single commit. The code changes from that commit — the
+  optional reranker seam in `Store`, the `model`-subcommand warm-up, and the
+  Containerfile/README updates — are reverted with it and would need to be
+  re-applied.
+
+## Caveats
+
+- **Suite power.** 8 single / 16 multi answerable questions. Retrieval is
+  deterministic, so the reported movements are real, but the suite cannot
+  certify small changes, and "no regression" means "none detectable here".
+- **Ingest cost not measured.** Both arms reused existing collections
+  (`--skip-ingest`), so neither run has an ingest report. This is safe for the
+  conclusion because reranking is query-time only and the collection/embedding
+  path is unchanged, but the ingest-cost table is intentionally omitted rather
+  than filled with an estimate.
+- **Latency is host-dependent.** The ~1.7 s p50/p95 was measured on this ARM
+  host's CPU with 50 candidates per query; a different host, a quantized model,
+  or a GPU could change the absolute numbers. The relative conclusion (much
+  slower than ~9 ms) is robust.
+- **Reranker input truncation.** fastembed truncates each query/document pair at
+  512 tokens. Long chunks can lose the evidence that made them relevant, which
+  may explain some of the demotions; this was not separately ablated.
+- **No relevance cutoff.** The fused `threshold` remains `0.0`, so every query
+  returns `k` hits and the negative controls report `no_hit = 0` by
+  construction. Reranking does not add a calibrated cutoff.
+- **English-only model.** `jinaai/jina-reranker-v1-turbo-en` is English-only;
+  the corpus is English, so this run cannot say how it behaves on other
+  languages.
+- **One run per arm.** Retrieval is deterministic, but latency is not; the
+  p50/p95 values are a single five-repetition sample per question.
+
+## Reproduction
+
+The treatment code is reverted, so `--experiment reranking` no longer selects
+it at HEAD. Build each arm from its pinned commit. Both commands use
+`--skip-ingest`, matching the measured run; the profile configs already point
+at the built collections (`eval-single-project-bge-small-en-v1-5-f017d3d86bc1`
+and `eval-multi-project-bge-small-en-v1-5-a3ea89d89f3c`).
+
+```sh
+# baseline arm — hybrid RRF, no reranker
+git checkout 76a006591902b0436f4feb1981e04cdbf41f8749
+just eval-run --experiment baseline --skip-ingest \
+  --profiles single-project,multi-project \
+  --k 1,3,5,7,10,20 --latency-k 7 --warmup 3 --reps 5
+
+# treatment arm — rerank top 50, cut to k
+git checkout 994b615a424da2433e872ddc6380b362971cb659
+just eval-run --experiment reranking --skip-ingest \
+  --profiles single-project,multi-project \
+  --k 1,3,5,7,10,20 --latency-k 7 --warmup 3 --reps 5
+
+# return to your branch, then render the comparison from the committed JSON
+git checkout <your-branch>
+just eval-report reranking
+```
+
 
