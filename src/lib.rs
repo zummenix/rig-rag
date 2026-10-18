@@ -8,7 +8,6 @@ pub mod model;
 pub mod promote;
 pub mod prune;
 pub mod report;
-pub mod reranker;
 pub mod retrieval;
 pub mod serve;
 pub mod sources;
