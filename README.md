@@ -73,7 +73,7 @@ until you promote something; until then `serve` exits with a clear error.
 | `rig-rag serve` | Serve the retrieval/chat API + built UI over HTTP |
 | `rig-rag promote <collection>` | Set the active collection in `rig-rag.toml` |
 | `rig-rag prune [--yes]` | Delete collections other than the active one (dry run without `--yes`) |
-| `rig-rag model` | Load the embedding model and print its id and dimensions |
+| `rig-rag model` | Load the embedding and reranking models and print their identity |
 
 ## Local workflow
 
@@ -169,8 +169,8 @@ The `server` service mounts `rig-rag.toml` (read-write), `sources.json`
 (`./qdrant_storage`, bind-mounted to `/qdrant/storage`) live on the host and
 persist across runs.
 
-The image bakes both ONNX Runtime and the embedding weights, so `serve` needs no
-network beyond OpenRouter.
+The image bakes both ONNX Runtime and the embedding and reranking weights, so
+`serve` needs no network beyond OpenRouter.
 
 ### OpenRouter credentials
 
@@ -199,13 +199,17 @@ OPENROUTER_MODEL_NAME=openai/gpt-5-mini
 - **Model identity.** The model slug is part of every collection name, so
   `serve` can refuse a collection built with a different model than the
   configured one. Qdrant itself rejects dimension mismatches.
+- **Reranking.** `serve` reranks the top 50 fused hybrid candidates with
+  `jinaai/jina-reranker-v1-turbo-en` and returns the best `k`; ingest never
+  loads the reranker. The model is ~151 MB on disk (~2.3 GB less than BGE
+  reranker v2-m3) but adds CPU work per query.
 
 ## Notes
 
 - `ingest` re-embeds every source in one process and peaks around 20-25 GiB of
   RAM; run it on a host with enough memory.
 - Changing `[embedding].model` requires a re-ingest and re-promote; the baked
-  image only contains the default model's weights.
+  image only contains the default embedding and reranking weights.
 - A changed corpus builds a whole new collection: every source is re-embedded.
 - `rig-rag ingest` prints peak process RSS and, in a container, the cgroup
   memory peak.

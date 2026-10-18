@@ -32,7 +32,8 @@ COPY shared ./shared
 # the mtimes to force a real rebuild.
 RUN find src shared -type f -exec touch {} +
 
-# `rig-rag model` loads the embedding model, baking its weights into the image.
+# `rig-rag model` loads the embedding and reranking models, baking their
+# weights into the image.
 ENV FASTEMBED_CACHE_DIR=/app/.fastembed_cache
 RUN cargo build --release --locked -p rig-rag \
     && ./target/release/rig-rag model \
