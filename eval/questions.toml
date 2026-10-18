@@ -46,6 +46,51 @@ gold = [
 notes = "API / reference. `jj new` creates a new commit on top of the current working-copy commit."
 
 [[question]]
+id = "jj-bookmarks-label"
+question = "I keep forgetting long hexadecimal IDs. Is there a way to attach a short handle to a particular version?"
+applies_to = ["single-project", "multi-project"]
+gold = [
+  { source = "jj", path = "bookmarks.md", must_contain = "named pointers to revisions" },
+]
+notes = "Semantic paraphrase with no content-word overlap with the gold sentence: the query avoids 'bookmark', 'name', and 'revision', while the answer defines bookmarks as 'named pointers to revisions'. Dense is the only path that can bridge handle → bookmark."
+
+[[question]]
+id = "jj-split-work"
+question = "How can I divide the current uncommitted changes into two separate commits?"
+applies_to = ["single-project", "multi-project"]
+gold = [
+  { source = "jj", path = "FAQ.md", must_contain = "jj split -i" },
+]
+notes = "How-to: splitting the working-copy commit. The query avoids the command verb 'split', leaving the divide → split bridge to the dense vector."
+
+[[question]]
+id = "jj-publish-remote"
+question = "How do I upload my commits to a remote hosting service?"
+applies_to = ["single-project", "multi-project"]
+gold = [
+  { source = "jj", path = "github.md", must_contain = "jj git push" },
+]
+notes = "Semantic paraphrase: 'upload' vs the gold command's 'push'. The GitHub guide frames the answer as pushing a bookmark to a remote."
+
+[[question]]
+id = "jj-colocated-convert"
+question = "Can I try jj on a project whose history is already managed by Git?"
+applies_to = ["single-project", "multi-project"]
+gold = [
+  { source = "jj", path = "FAQ.md", must_contain = "jj git init" },
+]
+notes = "Setup / factual: converting an existing Git repository into a colocated workspace with `jj git init`."
+
+[[question]]
+id = "jj-conflict-resolution"
+question = "Two people edited the same lines. What does jj write into the file to show the overlapping versions, and how do I finish fixing it?"
+applies_to = ["single-project", "multi-project"]
+gold = [
+  { source = "jj", path = "working-copy.md", must_contain = "add conflict markers to" },
+]
+notes = "Semantic paraphrase: the query avoids 'conflict' and 'markers'; the gold sentence says Jujutsu's solution is to add conflict markers to conflicted files."
+
+[[question]]
 id = "podman-detached-run"
 question = "How do I run a container in the background (detached) with podman?"
 applies_to = ["multi-project"]
@@ -55,6 +100,24 @@ gold = [
 notes = "How-to. Podman uses -d/--detach for detached mode. Multi-project only (no podman in the single-project corpus)."
 
 [[question]]
+id = "podman-host-files"
+question = "How can I make files created inside a container visible on the host?"
+applies_to = ["multi-project"]
+gold = [
+  { source = "podman", path = "tutorials/rootless_tutorial.md", must_contain = "podman run -it -v /home/john/folder:/container/volume" },
+]
+notes = "How-to: mounting a host directory into the container. The tutorial shows a file created in the container appearing in the host folder after exit. The query avoids the `-v`/mount wording. Multi-project only."
+
+[[question]]
+id = "podman-rootless-network"
+question = "Which network backend do unprivileged containers use by default?"
+applies_to = ["multi-project"]
+gold = [
+  { source = "podman", path = "tutorials/basic_networking.md", must_contain = "the default network mode is pasta" },
+]
+notes = "Semantic paraphrase: avoids 'rootless' and 'pasta'; the gold sentence says unprivileged (rootless) containers default to pasta. Tests the rootless-networking reference. Multi-project only."
+
+[[question]]
 id = "qdrant-docker-ports"
 question = "Which host ports does the Qdrant Docker container publish for its REST and gRPC APIs?"
 applies_to = ["multi-project"]
@@ -62,6 +125,33 @@ gold = [
   { source = "qdrant", path = "quickstart.md", must_contain = "docker run -p 6333:6333 -p 6334:6334" },
 ]
 notes = "Setup / reference. REST is 6333 and gRPC is 6334. Multi-project only."
+
+[[question]]
+id = "qdrant-filter-search"
+question = "How can I narrow vector search results using fields stored alongside each point?"
+applies_to = ["multi-project"]
+gold = [
+  { source = "qdrant", path = "search/filtering.md", must_contain = "set conditions when searching or retrieving points" },
+]
+notes = "How-to / reference: filtering by payload. Avoids 'filter' and 'payload'; the gold sentence introduces setting conditions on the payload and the point id."
+
+[[question]]
+id = "qdrant-shrink-vectors"
+question = "My index takes up too much RAM. Can I represent the embeddings more compactly without losing much accuracy?"
+applies_to = ["multi-project"]
+gold = [
+  { source = "qdrant", path = "manage-data/quantization.md", must_contain = "reduce the memory footprint" },
+]
+notes = "Semantic paraphrase: avoids 'quantization' and 'compress'; the gold sentence says quantization reduces the memory footprint, trading a small approximation error for smaller storage."
+
+[[question]]
+id = "qdrant-archive-collection"
+question = "How can I save a copy of my collection so I can recover it later or move it elsewhere?"
+applies_to = ["multi-project"]
+gold = [
+  { source = "qdrant", path = "snapshots.md", must_contain = "archive files that contain data and configuration" },
+]
+notes = "Semantic paraphrase: avoids 'snapshot' and 'backup'; the answer defines snapshots as tar archive files used to archive data or replicate a deployment."
 
 [[question]]
 id = "cross-project-config"
@@ -78,4 +168,11 @@ id = "unanswerable-geography"
 question = "What is the tallest mountain in South America?"
 applies_to = ["multi-project"]
 gold = []
-notes = "Negative / unanswerable control: nothing in the corpus is relevant. Its best-scoring chunk is ~0.46, below THRESHOLD (0.5), so no hit is returned at any k. Metrics report the no-hit rate instead of recall."
+notes = "Negative / unanswerable control: nothing in the corpus is relevant. In the dense-only baseline its best-scoring chunk was ~0.46, below THRESHOLD (0.5), so no hit was returned. Under hybrid RRF it shares the token 'america' with the corpus and does return hits, so it is *not* a clean no-hit control; `unanswerable-made-up-entity` is the clean one. Metrics report the no-hit rate instead of recall."
+
+[[question]]
+id = "unanswerable-made-up-entity"
+question = "What is the maximum airspeed of the Zorblax Q7 hovercraft?"
+applies_to = ["single-project", "multi-project"]
+gold = []
+notes = "Clean negative control: every distinctive token ('Zorblax', 'Q7', 'hovercraft', 'airspeed') is absent from both corpora, so neither the lexical nor the semantic path has a real match. Unlike `unanswerable-geography`, there is no accidental token overlap with the corpus; this is the question a restored no-hit guard must certify."
