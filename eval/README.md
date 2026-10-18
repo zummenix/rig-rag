@@ -123,13 +123,23 @@ notes = "..."
 - The single-project set is a **subset** of the multi-project set; both are
   asserted by `eval/tests/test_questions.py`.
 
-The seed set spans five categories: **factual/semantic** (e.g. `jj-author`, the
-paraphrase gap "author" vs "creator"), **how-to/procedural** (commands, config,
-setup), **API/reference** (flags, options, exact identifiers), **cross-project
+The set currently holds 18 questions: 8 `jj` questions applied to both profiles,
+8 multi-project-only answerable questions, and two negative controls (the
+multi-only `unanswerable-geography` and the shared `unanswerable-made-up-entity`).
+It spans five categories: **factual/semantic** (e.g. `jj-author`, the paraphrase
+gap "author" vs "creator"), **how-to/procedural** (commands, config, setup),
+**API/reference** (flags, options, exact identifiers), **cross-project
 ambiguity** (the same term in several projects; tests purity), and
 **unanswerable/negative** (not in the corpus, or requiring synthesis across
 docs). Build the multi-project set first; the single-project set is its
 `jj`-only subset.
+
+Several entries are deliberate semantic/paraphrase probes whose query avoids the
+gold sentence's distinctive terms (`jj-bookmarks-label`, `jj-publish-remote`,
+`jj-conflict-resolution`, `podman-host-files`, `qdrant-shrink-vectors`,
+`qdrant-archive-collection`); these are the questions that can expose a
+dense-recall change. `unanswerable-made-up-entity` uses only tokens absent from
+both corpora, so it is the clean negative a restored no-hit guard must hold.
 
 ## Outputs
 
@@ -280,17 +290,20 @@ keeping:
   `qdrant-docker-ports` first hit at k=8 (so multi-project `mean_recall` rose
   from 1/6 at k=7 to 1/3 at k=10). These are real retrieval behavior, not
   harness artifacts.
-- The suite is small (3 single-project / 6 multi-project answerable questions),
-  so it bounds large recall regressions only.
+- The suite is still small (8 single-project / 16 multi-project answerable
+  questions), so it bounds large recall changes only. The added semantic probes
+  are deliberately hard and are expected to start at low recall.
 
 ## Caveats and open risks
 
 - **Tokenizer fidelity.** `cl100k_base` is not BGE's WordPiece tokenizer, so
   token counts are approximations — fine for relative/cost ballparks, not exact
   embedding-cost math.
-- **Weak relevance threshold.** Dense scores are poorly calibrated here: most
-  off-topic questions clear `THRESHOLD = 0.5` (only 2 of 20 probed did not), so
-  a clean unanswerable question must be moved well away from the corpus.
+- **No calibrated no-hit guard.** The dense-only `THRESHOLD = 0.5` was poorly
+  calibrated (most off-topic questions cleared it), and the adopted hybrid path
+  sets `RRF_FLOOR = 0.0`, so every query returns `k` hits and `no_hit` is 0 by
+  construction. `unanswerable-made-up-entity` exists to certify a future
+  score-based guard; until then its top RRF score is not a relevance signal.
 - **Profile drift.** Pinned SHAs freeze the corpora; refreshing a pin is itself a
   decision (and possibly an experiment).
 - **Latency noise.** Host/Qdrant warmth affects p95; keep warmups/reps consistent
