@@ -63,6 +63,13 @@ class RigRagCommandTest(unittest.TestCase):
             ],
         )
 
+    def test_serve_command_appends_cache_flag(self):
+        rig = RigRag(Path("/bin/rig-rag"), Path("."))
+        command = rig.serve_command(
+            Path("cfg.toml"), "127.0.0.1:9", Path("no-site"), cache_rerank=True
+        )
+        self.assertEqual(command[-1], "--cache-rerank")
+
     def test_cli_path_relativizes_paths_under_cwd(self):
         rig = RigRag(Path("/bin/rig-rag"), Path("/repo"))
         self.assertEqual(rig._cli_path(Path("/repo/eval/x.toml")), "eval/x.toml")

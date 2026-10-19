@@ -57,6 +57,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="rebuild the target collection even when it already exists",
     )
     parser.add_argument(
+        "--cache-rerank",
+        action="store_true",
+        help=(
+            "start serve with --cache-rerank; the first k-sweep query per "
+            "question is recorded as a cold sample, later queries are warm"
+        ),
+    )
+    parser.add_argument(
         "--bin",
         default=None,
         help=(
@@ -136,6 +144,7 @@ def main(argv: list[str] | None = None) -> int:
         warmup=args.warmup,
         reps=args.reps,
         latency_k=args.latency_k,
+        cache_rerank=args.cache_rerank,
         port=args.port,
         startup_timeout=args.startup_timeout,
     )

@@ -43,6 +43,9 @@ enum Command {
         /// Directory of built UI assets to serve at `/`
         #[arg(long)]
         site_dir: Option<PathBuf>,
+        /// Cache rerank scores in memory (requires [reranker])
+        #[arg(long)]
+        cache_rerank: bool,
     },
     /// Load the embedding model and print its identity
     Model,
@@ -69,10 +72,15 @@ async fn main() -> Result<()> {
         Command::Ingest { force, pin, report } => {
             ingest::run(force, pin, report, config, sources).await
         }
-        Command::Serve { bind, site_dir } => {
+        Command::Serve {
+            bind,
+            site_dir,
+            cache_rerank,
+        } => {
             serve::run(serve::ServeArgs {
                 bind,
                 site_dir,
+                cache_rerank,
                 config_path: config,
             })
             .await

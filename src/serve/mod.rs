@@ -39,6 +39,8 @@ pub const DEFAULT_KEEP_ALIVE: Duration = Duration::from_secs(15);
 pub struct ServeArgs {
     pub bind: Option<String>,
     pub site_dir: Option<PathBuf>,
+    /// Enable the in-process rerank score cache (requires `[reranker]`).
+    pub cache_rerank: bool,
     /// Path of the runtime configuration to load.
     pub config_path: PathBuf,
 }
@@ -61,8 +63,18 @@ pub async fn run(args: ServeArgs) -> Result<()> {
         .map(Duration::from_secs)
         .unwrap_or(DEFAULT_KEEP_ALIVE);
 
-    let retriever = prod::QdrantRetriever::connect(&config).await?;
+    if args.cache_rerank && config.reranker.is_none() {
+        eprintln!("serve: --cache-rerank has no effect without [reranker]");
+    }
+    let retriever = prod::QdrantRetriever::connect(&config, args.cache_rerank).await?;
     let completer = prod::RigCompleter::connect()?;
+
+    if let Some(reranker) = &config.reranker {
+        println!(
+            "reranker: {} at {} (candidates: {}, cache: {})",
+            reranker.model, reranker.base_url, reranker.candidates, args.cache_rerank
+        );
+    }
 
     let app = router(AppState {
         retriever: Arc::new(retriever),

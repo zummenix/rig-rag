@@ -22,12 +22,16 @@ Layout (v1):
     "<profile>": {
       "collection": "...", "prefix": "...", "data_root": "...",
       "source_names": ["..."],
-      "latency": { "warmup", "reps", "latency_k", "samples_ms",
-                   "p50_ms", "p95_ms" },
+      "latency": { "warmup", "reps", "latency_k", "cache_rerank",
+                   "samples_ms", "p50_ms", "p95_ms",
+                   // present when --cache-rerank produced cache misses:
+                   "cold_samples_ms", "cold_p50_ms", "cold_p95_ms" },
+      "rerank": { "calls", "documents", "tokens", "cost", "cost_rub",
+                  "duration_ms", "p50_ms", "p95_ms", "failures" },
       "questions": [
         { "id", "question", "answerable", "gold": [...], "notes",
           "by_k": { "1": { per-k metrics }, ... },
-          "latency_ms": [...] }
+          "latency_ms": [...], "cold_ms": <float|null> }
       ]
     }
   },
@@ -41,6 +45,10 @@ The swept `k` set is recorded in `k_values` and defaults to the contract grid
 `k` used for a metric label (`recall@k`, `purity@k`, the unanswerable no-hit
 rate) comes from that recorded set, and `latency_k` — recorded per profile in
 `latency.latency_k` — must be one of the swept values.
+
+When `--cache-rerank` is used, `latency.samples_ms` are warm cache hits and
+`cold_*` samples come from the first k-sweep query per question (the only
+provider call). Without it, every recorded sample is an uncached call.
 
 `commit`/`commit_ref` are best-effort breadcrumbs. The runner does not require a
 clean or pushed work tree (jj working-copy commits, detached `HEAD`s, and dirty
@@ -169,6 +177,15 @@ def summarize(profiles: dict, k_values: tuple[int, ...], latency_k: int) -> dict
             for k in k_values
         ]
 
+        latency = {
+            "cache_rerank": profile["latency"].get("cache_rerank", False),
+            "p50_ms": profile["latency"]["p50_ms"],
+            "p95_ms": profile["latency"]["p95_ms"],
+        }
+        for key in ("cold_p50_ms", "cold_p95_ms"):
+            if key in profile["latency"]:
+                latency[key] = profile["latency"][key]
+
         summary[name] = {
             "questions_applied": len(applied),
             "answerable": len(answered),
@@ -177,10 +194,8 @@ def summarize(profiles: dict, k_values: tuple[int, ...], latency_k: int) -> dict
             f"mean_purity@{latency_k}": mean_purity,
             f"mean_mrr@{latency_k}": mean_mrr,
             "unanswerable_no_hit_rate": mean(no_hit_values),
-            "latency": {
-                "p50_ms": profile["latency"]["p50_ms"],
-                "p95_ms": profile["latency"]["p95_ms"],
-            },
+            "latency": latency,
+            "rerank": profile.get("rerank"),
         }
     return summary
 

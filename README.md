@@ -11,6 +11,7 @@ optional WASM web UI.
   `[qdrant].url` / `QDRANT_URL`)
 - `git` on `PATH` (used to fetch sources)
 - For `serve`: `OPENROUTER_API_KEY` and `OPENROUTER_MODEL_NAME`
+- For `serve` with `[reranker]`: `RERANKER_API_KEY`
 - For building the web UI (`site/`): the `wasm32-unknown-unknown` target and
   [`trunk`](https://trunkrs.dev/) (`rustup target add wasm32-unknown-unknown` +
   `cargo install trunk`)
@@ -65,15 +66,35 @@ keep_alive_secs = 15
 `[collection].active` names the collection that `serve` reads from. It is empty
 until you promote something; until then `serve` exits with a clear error.
 
+Optional cloud reranking (omit the section for fusion-only retrieval):
+
+```toml
+[reranker]
+# API root including the version segment; the app posts to {base_url}/rerank.
+base_url = "https://api.jina.ai/v1"
+model = "jina-reranker-v2-base-multilingual"
+# Fused candidates scored before cutting to k (default 30).
+candidates = 30
+# Per-request timeout; cloud rerankers can take seconds (default 10000).
+timeout_ms = 10000
+```
+
+The authorization token is read from `RERANKER_API_KEY` and sent as
+`Authorization: Bearer`; it is never stored in this tracked file. When the
+section is present, `serve` fetches `max(k, candidates)` fused hits, rescores
+them, and returns the best `k`. A reranker error or timeout falls back to the
+fused order with a warning. `serve --cache-rerank` adds an in-process score
+cache so repeated identical queries skip the cloud call.
+
 ## Commands
 
 | Command | Description |
 | --- | --- |
 | `rig-rag ingest [--force] [--report <path>]` | Fetch sources, embed the corpus, insert into a new collection (optionally write a JSON report) |
-| `rig-rag serve` | Serve the retrieval/chat API + built UI over HTTP |
+| `rig-rag serve [--cache-rerank]` | Serve the retrieval/chat API + built UI over HTTP (optionally cache rerank scores) |
 | `rig-rag promote <collection>` | Set the active collection in `rig-rag.toml` |
 | `rig-rag prune [--yes]` | Delete collections other than the active one (dry run without `--yes`) |
-| `rig-rag model` | Load the embedding model and print its id and dimensions |
+| `rig-rag model` | Load the embedding model and print its id, dimensions, and configured reranker |
 
 ## Local workflow
 

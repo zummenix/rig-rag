@@ -15,6 +15,7 @@ use crate::chunk::DocChunk;
 use crate::config::Config;
 use crate::embedding;
 use crate::hashing;
+use crate::reranker::{Ranked, Reranker};
 
 use tokio::sync::{mpsc, oneshot};
 
@@ -88,6 +89,7 @@ pub struct Store {
     client: Qdrant,
     collection: String,
     embed_tx: mpsc::Sender<EmbedRequest>,
+    reranker: Option<Reranker>,
 }
 
 impl Store {
@@ -102,13 +104,15 @@ impl Store {
             client,
             collection,
             embed_tx,
+            reranker: None,
         }
     }
 
     /// Connects to Qdrant and returns a store bound to the collection named in
     /// the config, verifying that it exists and was built with the configured
-    /// model.
-    pub async fn connect(config: &Config) -> Result<Self> {
+    /// model. When `[reranker]` is configured, `cache_rerank` enables its score
+    /// cache.
+    pub async fn connect(config: &Config, cache_rerank: bool) -> Result<Self> {
         let client = client(&config.qdrant.url)?;
         let active = &config.collection.active;
 
@@ -125,7 +129,11 @@ impl Store {
 
         verify_model(active, &config.embedding.model, &config.corpus.prefix)?;
         let model = embedding::load_slug(&config.embedding.model)?;
-        Ok(Self::new(client, active.clone(), model))
+        let mut store = Self::new(client, active.clone(), model);
+        if let Some(reranker) = &config.reranker {
+            store.reranker = Some(Reranker::from_config(reranker, cache_rerank)?);
+        }
+        Ok(store)
     }
 
     /// Embeds each chunk's text into one dense vector, in chunk order.
@@ -174,6 +182,10 @@ impl Store {
     /// Returns the `k` chunks most relevant to `question`, best first, by
     /// fusing a BM25 sparse prefetch and a dense prefetch with Reciprocal Rank
     /// Fusion; drops any fused hit whose RRF score is below `threshold`.
+    ///
+    /// With a reranker configured, up to `max(k, [reranker].candidates)` fused
+    /// hits are scored first and the result is cut to `k`. A reranker failure
+    /// falls back to the fused order after logging the error.
     pub async fn search(
         &self,
         question: &str,
@@ -198,6 +210,11 @@ impl Store {
             .query(Query::new_nearest(query_vector))
             .limit(HYBRID_PREFETCH_LIMIT);
 
+        let limit = match &self.reranker {
+            Some(reranker) => reranker.candidates().max(k),
+            None => k,
+        };
+
         let response = self
             .client
             .query(
@@ -210,20 +227,32 @@ impl Store {
                         weights: vec![SPARSE_WEIGHT, DENSE_WEIGHT],
                     }))
                     .score_threshold(threshold)
-                    .limit(k)
+                    .limit(limit)
                     .build(),
             )
             .await
             .with_context(|| format!("failed to query collection {:?}", self.collection))?;
 
-        response
+        let hits: Vec<(DocChunk, f32)> = response
             .result
             .into_iter()
             .map(|point| {
                 let chunk: DocChunk = serde_json::from_value(serde_json::to_value(point.payload)?)?;
                 Ok((chunk, point.score))
             })
-            .collect()
+            .collect::<Result<_>>()?;
+
+        if let Some(reranker) = &self.reranker {
+            let documents: Vec<String> = hits.iter().map(|(chunk, _)| chunk.text.clone()).collect();
+            match reranker.rerank(question, &documents).await {
+                Ok(ranked) => return Ok(select_reranked(hits, &ranked, k)),
+                Err(error) => {
+                    eprintln!("serve: rerank failed (falling back to fusion): {error:#}");
+                }
+            }
+        }
+
+        Ok(hits.into_iter().take(k as usize).collect())
     }
 
     async fn embed_texts(&self, texts: Vec<String>) -> Result<Vec<Vec<f32>>> {
@@ -234,6 +263,31 @@ impl Store {
             .context("embedding worker has shut down")?;
         reply_rx.await?
     }
+}
+
+/// Applies a reranker's best-first ordering to fused `hits`, taking at most
+/// `k`. Candidates the reranker omitted are appended in fused order with their
+/// fused scores, so the caller still receives `k` hits when the pool has them.
+fn select_reranked(hits: Vec<(DocChunk, f32)>, ranked: &[Ranked], k: u64) -> Vec<(DocChunk, f32)> {
+    let limit = k as usize;
+    let mut slots: Vec<Option<(DocChunk, f32)>> = hits.into_iter().map(Some).collect();
+    let mut selected = Vec::with_capacity(limit.min(slots.len()));
+
+    for item in ranked {
+        if selected.len() >= limit {
+            break;
+        }
+        if let Some(hit) = slots.get_mut(item.index).and_then(Option::take) {
+            selected.push((hit.0, item.score));
+        }
+    }
+    for hit in slots.into_iter().flatten() {
+        if selected.len() >= limit {
+            break;
+        }
+        selected.push(hit);
+    }
+    selected
 }
 
 /// Checks a collection was built with `configured`, using the model slug baked
@@ -265,5 +319,86 @@ fn embedding_worker(mut model: TextEmbedding, mut rx: mpsc::Receiver<EmbedReques
         let result = embedding::embed(&mut model, texts);
         // Ignore send errors: the caller may have timed out / been cancelled.
         let _ = reply_tx.send(result);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn hit(text: &str, score: f32) -> (DocChunk, f32) {
+        (
+            DocChunk {
+                path: "a.md".to_owned(),
+                start_line: 1,
+                end_line: 1,
+                text: text.to_owned(),
+                chunk_index: 0,
+            },
+            score,
+        )
+    }
+
+    #[test]
+    fn select_reranked_reorders_and_truncates_to_k() {
+        let hits = vec![hit("a", 0.9), hit("b", 0.8), hit("c", 0.7)];
+        let ranked = vec![
+            Ranked {
+                index: 2,
+                score: 0.95,
+            },
+            Ranked {
+                index: 0,
+                score: 0.5,
+            },
+            Ranked {
+                index: 1,
+                score: 0.1,
+            },
+        ];
+
+        let selected = select_reranked(hits, &ranked, 2);
+
+        assert_eq!(selected.len(), 2);
+        assert_eq!(selected[0].0.text, "c");
+        assert_eq!(selected[0].1, 0.95);
+        assert_eq!(selected[1].0.text, "a");
+    }
+
+    #[test]
+    fn select_reranked_appends_omitted_candidates_in_fused_order() {
+        let hits = vec![hit("a", 0.9), hit("b", 0.8), hit("c", 0.7)];
+        let ranked = vec![Ranked {
+            index: 1,
+            score: 0.6,
+        }];
+
+        let selected = select_reranked(hits, &ranked, 3);
+
+        assert_eq!(
+            selected
+                .iter()
+                .map(|(c, _)| c.text.as_str())
+                .collect::<Vec<_>>(),
+            vec!["b", "a", "c"]
+        );
+        assert_eq!(selected[0].1, 0.6);
+        assert_eq!(selected[1].1, 0.9);
+        assert_eq!(selected[2].1, 0.7);
+    }
+
+    #[test]
+    fn select_reranked_ignores_out_of_range_indexes() {
+        let hits = vec![hit("a", 0.9)];
+        let ranked = vec![Ranked {
+            index: 3,
+            score: 1.0,
+        }];
+
+        let selected = select_reranked(hits, &ranked, 1);
+
+        assert_eq!(selected.len(), 1);
+        assert_eq!(selected[0].0.text, "a");
+        assert_eq!(selected[0].1, 0.9);
     }
 }

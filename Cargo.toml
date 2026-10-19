@@ -41,6 +41,7 @@ futures = "0.3"
 hex = "0.4"
 libc = "0.2"
 qdrant-client = "1.19"
+reqwest = { version = "0.13", features = ["json", "stream"] }
 rig-agent = "0.44"
 rig-core = { version = "0.44", features = ["reqwest"] }
 serde = { version = "1.0.229", features = ["derive"] }
@@ -56,4 +57,3 @@ uuid = "1.28.0"
 
 [dev-dependencies]
 eventsource-stream = "0.2"
-reqwest = { version = "0.13", default-features = false, features = ["json", "stream"] }

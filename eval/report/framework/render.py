@@ -392,43 +392,109 @@ def _quality(
 def _latency(results: dict, profiles: list[str]) -> str:
     p50 = []
     p95 = []
+    cold = []
     rows: list[list[object]] = []
+    cached = False
     for name in profiles:
         latency = ((results.get("profiles") or {}).get(name) or {}).get("latency") or {}
         p50.append(latency.get("p50_ms"))
         p95.append(latency.get("p95_ms"))
+        cold_p50 = latency.get("cold_p50_ms")
+        cold.append(cold_p50)
+        is_cached = bool(latency.get("cache_rerank"))
+        cached = cached or is_cached
         rows.append(
             [
                 name,
+                "on" if is_cached else "off",
                 _number(latency.get("warmup")),
                 _number(latency.get("reps")),
                 _number(latency.get("latency_k")),
                 _number(latency.get("p50_ms"), digits=2),
                 _number(latency.get("p95_ms"), digits=2),
+                _number(cold_p50, digits=2),
                 _number(len(latency.get("samples_ms") or [])),
             ]
         )
 
+    series = [
+        svg.Series("p50", p50, svg.PALETTE["p50"]),
+        svg.Series("p95", p95, svg.PALETTE["p95"]),
+    ]
+    if any(value is not None for value in cold):
+        series.append(svg.Series("cold p50", cold, svg.PALETTE.get("cold", "#c26a00")))
     chart = svg.grouped_bar_chart(
         profiles,
-        [
-            svg.Series("p50", p50, svg.PALETTE["p50"]),
-            svg.Series("p95", p95, svg.PALETTE["p95"]),
-        ],
+        series,
         value_format="0.1f",
         y_label="milliseconds",
         title="Query latency by profile",
     )
-    body = layout.figure(
-        layout.Raw(chart),
-        "Sequential /api/query latency after warmup, measured at the profile's latency k.",
-    )
+    caption = "Sequential /api/query latency after warmup, measured at the profile's latency k."
+    if cached:
+        caption += (
+            " With --cache-rerank, p50/p95 are warm cache hits; cold p50 is the"
+            " first (provider) call per question."
+        )
+    body = layout.figure(layout.Raw(chart), caption)
     body += layout.table(
-        ["Profile", "warmup", "reps", "latency k", "p50 ms", "p95 ms", "samples"],
+        [
+            "Profile",
+            "cache",
+            "warmup",
+            "reps",
+            "latency k",
+            "p50 ms",
+            "p95 ms",
+            "cold p50 ms",
+            "samples",
+        ],
+        rows,
+        numeric_from=2,
+    )
+    return layout.section("Latency", layout.Raw(body), anchor="latency")
+
+
+def _rerank(results: dict, profiles: list[str]) -> str:
+    rows: list[list[object]] = []
+    any_usage = False
+    for name in profiles:
+        rerank = ((results.get("profiles") or {}).get(name) or {}).get("rerank") or {}
+        calls = rerank.get("calls") or 0
+        failures = rerank.get("failures") or 0
+        any_usage = any_usage or calls > 0 or failures > 0
+        rows.append(
+            [
+                name,
+                _number(calls),
+                _number(failures),
+                _number(rerank.get("documents")),
+                _number(rerank.get("tokens")),
+                _number(rerank.get("cost"), digits=6),
+                _number(rerank.get("cost_rub"), digits=6),
+                _number(rerank.get("p50_ms"), digits=2),
+                _number(rerank.get("p95_ms"), digits=2),
+            ]
+        )
+
+    if not any_usage:
+        return ""
+    body = layout.table(
+        [
+            "Profile",
+            "calls",
+            "failures",
+            "documents",
+            "tokens",
+            "cost",
+            "cost RUB",
+            "cloud p50 ms",
+            "cloud p95 ms",
+        ],
         rows,
         numeric_from=1,
     )
-    return layout.section("Latency", layout.Raw(body), anchor="latency")
+    return layout.section("Rerank usage", layout.Raw(body), anchor="rerank")
 
 
 def _degradation(results: dict, k_values: tuple[int, ...], latency_k: int) -> str:
@@ -851,6 +917,7 @@ def render_report(
         _summary(results, profiles, k_values, latency_k) if results is not None else "",
         _quality(results, profiles, k_values, latency_k) if results is not None else "",
         _latency(results, profiles) if results is not None else "",
+        _rerank(results, profiles) if results is not None else "",
         _degradation(results, k_values, latency_k) if results is not None else "",
         _appendix(results, profiles) if results is not None else "",
         _methodology(results is not None, bool(ingest_docs)),
