@@ -50,6 +50,7 @@ flag lists, run `just eval-run-help` and `just eval-report-help`.
 | [Bound chunk size to the embedding window](experiments/chunk_max_tokens.md) | **Rejected** (not adopted) — capping chunks at 384 `o200k_base` tokens fixed BGE-window truncation mechanically but regressed `jj-new-change` (rank 1 → beyond k=10); MRR down and cost up |
 | [Hybrid dense + BM25 retrieval](experiments/hybrid_search.md) | **Adopted** — fusing a server-side BM25 sparse vector with the dense BGE vector by weighted RRF lifted multi-project `recall@20` 0.333 → 0.833 (`recall@3` 0.167 → 0.500) with single-project unchanged, at ~1.5 ms p50 and ~2× insert; the negative-control `no_hit` falls to 0 and the weights were tuned on the suite (both recorded as caveats) |
 | [Cross-encoder reranking](experiments/reranking.md) | **Rejected** (not adopted) — a 151 MB Jina turbo reranker over the top 50 fused candidates promoted a few golds into the top 20 but regressed multi-project `recall@7`/`recall@10`, left `recall@20` flat, and cost ~1.7 s per query (~180–190×); the code was reverted |
+| [Cloud reranking](experiments/cloud_reranking.md) | **Measured — recommended for adoption** — a cloud `rerank-3` pass over the top 30 fused candidates lifted single-project `recall@7` 0.250 → 0.500 and multi-project `recall@7`/`recall@10` 0.313/0.375 → 0.375/0.500 (`MRR@7` 0.188 → 0.294, purity@7 0.866 → 0.929); cold p50 ~1.1 s, warm cache-hit p50 ~10 ms, 30 calls cost 2.17 RUB |
 
 Each experiment is an `eval/experiments/<id>.md` record plus a run under
 `eval/results/<id>/`; add a row here when a new one lands. The `baseline` id is
@@ -65,6 +66,8 @@ the reference run (no record document — just the committed runs and its
 - `OPENROUTER_API_KEY` and `OPENROUTER_MODEL_NAME` in the environment: `serve`
   boots the chat agent at startup even though `/api/query` needs no LLM, so the
   retrieval harness currently inherits that requirement.
+- `RERANKER_API_KEY` when the selected profiles carry a `[reranker]` section
+  (the `cloud_reranking` treatment arm does); `serve` fails fast without it.
 
 ## Profiles
 
@@ -101,6 +104,10 @@ The harness reuses the main binary; the eval-supporting additions are:
 
 Retrieval knobs stay **hardcoded** (an experiment edits the code/const); eval
 hits the existing `/api/query` endpoint, so there is no HTTP contract change.
+Reranking is the exception: a profile may carry `[reranker]`, and
+`--cache-rerank` starts `serve` with its in-process score cache. The runner
+records warm samples (cache hits), cold first-call samples, and provider
+usage/cost parsed from `serve-<profile>.log`.
 
 ## Questions
 
