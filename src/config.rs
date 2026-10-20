@@ -26,8 +26,59 @@ pub struct Config {
     /// (prefix `docs`, data root `data`), so existing configs are unchanged.
     #[serde(default)]
     pub corpus: CorpusConfig,
+    /// Optional cloud reranker. Absent entirely means fusion-only retrieval.
+    pub reranker: Option<RerankerConfig>,
     /// Defaults for the server; CLI flags override each field.
     pub server: Option<ServerConfig>,
+}
+
+/// Optional `[reranker]` section for a cloud `/v1/rerank` endpoint.
+///
+/// The authorization token is deliberately not a field: `rig-rag.toml` is
+/// tracked, so the token is read from [`RERANKER_API_KEY`] instead.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RerankerConfig {
+    /// API root including the version segment, e.g. `https://api.jina.ai/v1`.
+    /// The rerank endpoint is `{base_url}/rerank`.
+    pub base_url: String,
+    /// Reranker model id, e.g. `rerank-3`.
+    pub model: String,
+    /// Fused candidates scored per query before cutting to `k`.
+    #[serde(default = "default_rerank_candidates")]
+    pub candidates: u64,
+    /// Per-request timeout. Cloud rerankers can take seconds per call.
+    #[serde(default = "default_rerank_timeout_ms")]
+    pub timeout_ms: u64,
+}
+
+/// Environment variable holding the reranker authorization token.
+pub const RERANKER_API_KEY: &str = "RERANKER_API_KEY";
+
+/// Default number of fused candidates sent to the reranker.
+pub const DEFAULT_RERANK_CANDIDATES: u64 = 30;
+/// Default per-request reranker timeout.
+pub const DEFAULT_RERANK_TIMEOUT_MS: u64 = 10_000;
+
+fn default_rerank_candidates() -> u64 {
+    DEFAULT_RERANK_CANDIDATES
+}
+
+fn default_rerank_timeout_ms() -> u64 {
+    DEFAULT_RERANK_TIMEOUT_MS
+}
+
+impl RerankerConfig {
+    /// The authorization token, or an error naming the environment variable.
+    pub fn api_key(&self) -> Result<String> {
+        let token = std::env::var(RERANKER_API_KEY).with_context(|| {
+            format!("[reranker] is configured, but {RERANKER_API_KEY} is not set")
+        })?;
+        if token.trim().is_empty() {
+            anyhow::bail!("[reranker] is configured, but {RERANKER_API_KEY} is empty");
+        }
+        Ok(token.trim().to_owned())
+    }
 }
 
 /// Optional `[corpus]` section controlling collection prefixes and where
@@ -152,7 +203,37 @@ active = ""
         assert_eq!(config.qdrant.url, "http://localhost:6334");
         assert_eq!(config.embedding.model, "bge-small-en-v1.5");
         assert_eq!(config.collection.active, "");
+        assert!(config.reranker.is_none());
         assert!(config.server.is_none());
+    }
+
+    #[test]
+    fn parses_reranker_section_with_defaults() {
+        let raw = format!(
+            "{SAMPLE}\n[reranker]\nbase_url = \"https://api.example.com/v1\"\nmodel = \"rerank-3\"\n"
+        );
+        let config = Config::parse(&raw).unwrap();
+        let reranker = config.reranker.expect("reranker section");
+        assert_eq!(reranker.base_url, "https://api.example.com/v1");
+        assert_eq!(reranker.model, "rerank-3");
+        assert_eq!(reranker.candidates, DEFAULT_RERANK_CANDIDATES);
+        assert_eq!(reranker.timeout_ms, DEFAULT_RERANK_TIMEOUT_MS);
+    }
+
+    #[test]
+    fn parses_reranker_overrides() {
+        let raw = format!(
+            "{SAMPLE}\n[reranker]\nbase_url = \"u\"\nmodel = \"m\"\ncandidates = 50\ntimeout_ms = 2500\n"
+        );
+        let reranker = Config::parse(&raw).unwrap().reranker.unwrap();
+        assert_eq!(reranker.candidates, 50);
+        assert_eq!(reranker.timeout_ms, 2500);
+    }
+
+    #[test]
+    fn rejects_unknown_reranker_field() {
+        let raw = format!("{SAMPLE}\n[reranker]\nbase_url = \"u\"\nmodel = \"m\"\nbogus = 1\n");
+        assert!(Config::parse(&raw).is_err());
     }
 
     #[test]

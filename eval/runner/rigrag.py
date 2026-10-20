@@ -72,8 +72,10 @@ class RigRag:
     def promote(self, config: Path, collection: str) -> None:
         self._run("--config", self._cli_path(config), "promote", collection)
 
-    def serve_command(self, config: Path, bind: str, site_dir: Path) -> list[str]:
-        return self._command(
+    def serve_command(
+        self, config: Path, bind: str, site_dir: Path, cache_rerank: bool = False
+    ) -> list[str]:
+        command = self._command(
             "--config",
             self._cli_path(config),
             "serve",
@@ -82,6 +84,9 @@ class RigRag:
             "--site-dir",
             self._cli_path(site_dir),
         )
+        if cache_rerank:
+            command.append("--cache-rerank")
+        return command
 
     def model(self, config: Path) -> str:
         result = self._run_capture("--config", self._cli_path(config), "model")

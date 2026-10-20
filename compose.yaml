@@ -29,6 +29,7 @@ services:
       QDRANT_URL: http://qdrant:6334
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
       OPENROUTER_MODEL_NAME: ${OPENROUTER_MODEL_NAME:-}
+      RERANKER_API_KEY: ${RERANKER_API_KEY:-}
     volumes:
       - ./sources.json:/app/sources.json:ro
       - ./rig-rag.toml:/app/rig-rag.toml

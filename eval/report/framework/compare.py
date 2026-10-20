@@ -117,8 +117,11 @@ def retrieval_metrics(
         metrics[f"recall@{k}"] = mean_recall.get(f"recall@{k}")
     metrics[f"purity@{latency_k}"] = summary.get(f"mean_purity@{latency_k}")
     metrics[f"mrr@{latency_k}"] = summary.get(f"mean_mrr@{latency_k}")
-    metrics["p50_ms"] = latency.get("p50_ms")
-    metrics["p95_ms"] = latency.get("p95_ms")
+    # With --cache-rerank the recorded p50/p95 are warm cache hits; compare the
+    # provider-facing cold samples instead, or the baseline delta is meaningless.
+    cached = latency.get("cache_rerank") and latency.get("cold_p50_ms") is not None
+    metrics["p50_ms"] = latency.get("cold_p50_ms") if cached else latency.get("p50_ms")
+    metrics["p95_ms"] = latency.get("cold_p95_ms") if cached else latency.get("p95_ms")
     metrics["no_hit_rate"] = summary.get("unanswerable_no_hit_rate")
     return metrics
 

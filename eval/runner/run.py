@@ -23,6 +23,7 @@ from eval.runner.paths import repo_relative
 from eval.runner.profiles import Profile, discover_profiles, parse_profile
 from eval.runner.rigrag import RigRag, binary_sha256, resolve_binary
 from eval.runner.serve import free_port, running_server
+from eval.runner import serve_log
 
 RESULTS_DIR = "eval/results"
 
@@ -39,6 +40,7 @@ class RunOptions:
     warmup: int = 3
     reps: int = 5
     latency_k: int = LATENCY_K
+    cache_rerank: bool = False
     port: int = 0
     startup_timeout: float = 90.0
     hits: list[dict] = field(default_factory=list)
@@ -137,11 +139,18 @@ def _sweep(
 ) -> dict:
     per_question: list[dict] = []
     latency_samples: list[float] = []
+    cold_samples: list[float] = []
 
     for question in questions:
         by_k: dict[str, dict] = {}
-        for k in options.k_values:
-            hits, _ = client.query(question.question, k)
+        cold_ms: float | None = None
+        for index, k in enumerate(options.k_values):
+            hits, elapsed_ms = client.query(question.question, k)
+            if index == 0 and options.cache_rerank:
+                # The first retrieval query for a question is the only cache
+                # miss; later k values reuse the same candidate-set ranking.
+                cold_ms = round(elapsed_ms, 3)
+                cold_samples.append(cold_ms)
             by_k[str(k)] = evaluate_at_k(hits, question, profile.data_root)
             for rank, hit in enumerate(hits, start=1):
                 options.hits.append(
@@ -165,21 +174,29 @@ def _sweep(
                 "notes": question.notes,
                 "by_k": by_k,
                 "latency_ms": latency_ms,
+                "cold_ms": cold_ms,
             }
         )
+
+    latency = {
+        "warmup": options.warmup,
+        "reps": options.reps,
+        "latency_k": options.latency_k,
+        "cache_rerank": options.cache_rerank,
+        "samples_ms": latency_samples,
+        "p50_ms": percentile(latency_samples, 50),
+        "p95_ms": percentile(latency_samples, 95),
+    }
+    if cold_samples:
+        latency["cold_samples_ms"] = cold_samples
+        latency["cold_p50_ms"] = percentile(cold_samples, 50)
+        latency["cold_p95_ms"] = percentile(cold_samples, 95)
 
     return {
         "prefix": profile.prefix,
         "data_root": profile.data_root,
         "source_names": sorted(profile.source_names()),
-        "latency": {
-            "warmup": options.warmup,
-            "reps": options.reps,
-            "latency_k": options.latency_k,
-            "samples_ms": latency_samples,
-            "p50_ms": percentile(latency_samples, 50),
-            "p95_ms": percentile(latency_samples, 95),
-        },
+        "latency": latency,
         "questions": per_question,
     }
 
@@ -282,9 +299,11 @@ def run(options: RunOptions) -> Path:
             port,
             log_path,
             startup_timeout=options.startup_timeout,
+            cache_rerank=options.cache_rerank,
         ) as client:
             result = _sweep(client, applicable, profile, options)
         result["collection"] = collection
+        result["rerank"] = serve_log.rerank_stats(log_path)
         profile_results[profile.name] = result
 
     qdrant_url = profiles[0].config.get("qdrant", {}).get("url", "")
