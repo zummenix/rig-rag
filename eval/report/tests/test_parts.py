@@ -18,7 +18,7 @@ class DiscoverRunPartsTest(unittest.TestCase):
     def test_finds_both_parts(self):
         with tempfile.TemporaryDirectory() as tmp:
             run = Path(tmp) / "run"
-            plant(run / "results.json", FIXTURES / "v1" / "results.json")
+            plant(run / "results.json", FIXTURES / "v2" / "results.json")
             plant(run / "ingest-single-project.json", CREATED)
             parts = discover_run_parts(run)
             self.assertTrue(parts.has_retrieval)
@@ -54,7 +54,7 @@ class LatestRunTest(unittest.TestCase):
     def test_picks_the_newest_non_empty_run(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            plant(root / "2026-01-01T00-00-00Z" / "results.json", FIXTURES / "v1" / "results.json")
+            plant(root / "2026-01-01T00-00-00Z" / "results.json", FIXTURES / "v2" / "results.json")
             plant(root / "2026-02-01T00-00-00Z" / "ingest-single-project.json", CREATED)
             # an even newer, empty run must be skipped
             (root / "2026-03-01T00-00-00Z").mkdir()
@@ -72,7 +72,7 @@ class LoadRunTest(unittest.TestCase):
     def test_loads_results_and_ingest_keyed_by_profile(self):
         with tempfile.TemporaryDirectory() as tmp:
             run = Path(tmp) / "run"
-            plant(run / "results.json", FIXTURES / "v1" / "results.json")
+            plant(run / "results.json", FIXTURES / "v2" / "results.json")
             plant(run / "ingest-single-project.json", CREATED)
             loaded = load_run(run)
             self.assertIsNotNone(loaded.results)
@@ -90,7 +90,7 @@ class LoadRunTest(unittest.TestCase):
             for run in ("2026-01-01T00-00-00Z", "2026-02-01T00-00-00Z"):
                 plant(
                     root / "eval" / "results" / "baseline" / run / "results.json",
-                    FIXTURES / "v1" / "results.json",
+                    FIXTURES / "v2" / "results.json",
                 )
             loaded = resolve_run("baseline", root=root)
             self.assertIsNotNone(loaded.results)
@@ -98,14 +98,14 @@ class LoadRunTest(unittest.TestCase):
     def test_resolve_by_run_directory_path(self):
         with tempfile.TemporaryDirectory() as tmp:
             run = Path(tmp) / "run"
-            plant(run / "results.json", FIXTURES / "v1" / "results.json")
+            plant(run / "results.json", FIXTURES / "v2" / "results.json")
             self.assertIsNotNone(resolve_run(run, root=tmp).results)
 
     def test_resolve_by_root_relative_path(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             run = root / "eval" / "results" / "baseline" / "2026-01-01T00-00-00Z"
-            plant(run / "results.json", FIXTURES / "v1" / "results.json")
+            plant(run / "results.json", FIXTURES / "v2" / "results.json")
             loaded = resolve_run("eval/results/baseline/2026-01-01T00-00-00Z", root=root)
             self.assertIsNotNone(loaded.results)
             self.assertEqual(loaded.parts.run_dir, run)
@@ -113,7 +113,7 @@ class LoadRunTest(unittest.TestCase):
     def test_resolve_by_results_file_uses_its_directory_for_ingest(self):
         with tempfile.TemporaryDirectory() as tmp:
             run = Path(tmp) / "run"
-            plant(run / "results.json", FIXTURES / "v1" / "results.json")
+            plant(run / "results.json", FIXTURES / "v2" / "results.json")
             plant(run / "ingest-single-project.json", CREATED)
             loaded = resolve_run(run / "results.json", root=tmp)
             self.assertTrue(loaded.ingest_by_profile())

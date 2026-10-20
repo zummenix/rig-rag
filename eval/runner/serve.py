@@ -34,13 +34,12 @@ def running_server(
     log_path: Path,
     startup_timeout: float = 90.0,
     poll_interval: float = 0.25,
-    cache_rerank: bool = False,
 ) -> Iterator[QueryClient]:
     """Context manager yielding a healthy [`QueryClient`] for one server."""
 
     host = "127.0.0.1"
     site_dir = log_path.parent / "no-site"
-    command = rig.serve_command(config, f"{host}:{port}", site_dir, cache_rerank=cache_rerank)
+    command = rig.serve_command(config, f"{host}:{port}", site_dir)
 
     log_path.parent.mkdir(parents=True, exist_ok=True)
     log = log_path.open("w", encoding="utf-8")

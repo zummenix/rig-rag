@@ -17,13 +17,13 @@ def quiet_stderr():
 
 class ParseKTest(unittest.TestCase):
     def test_normalizes_sorts_and_dedupes(self):
-        self.assertEqual(cli._parse_k("5, 1 ,3,1"), (1, 3, 5))
+        self.assertEqual(cli._parse_k("7, 3 ,20,3"), (3, 7, 20))
 
     def test_accepts_a_subset_of_the_contract_grid(self):
-        self.assertEqual(cli._parse_k("1"), (1,))
+        self.assertEqual(cli._parse_k("3,20"), (3, 20))
 
     def test_rejects_values_outside_the_grid(self):
-        for raw in ("4", "1,21", "0", "1,3,4"):
+        for raw in ("1", "5", "10", "3,4", "0", "21"):
             with quiet_stderr(), self.assertRaises(argparse.ArgumentTypeError):
                 cli._parse_k(raw)
 
@@ -37,25 +37,23 @@ class ParseKTest(unittest.TestCase):
 
 
 class ParserTest(unittest.TestCase):
-    def test_defaults_to_the_full_grid_at_k7(self):
+    def test_defaults_to_the_full_grid(self):
         args = cli.build_parser().parse_args([])
         self.assertEqual(args.k, K_VALUES)
-        self.assertEqual(args.latency_k, 7)
+        self.assertEqual(K_VALUES, (3, 7, 20))
+
+    def test_removed_flags_are_rejected(self):
+        for flag in ("--cache-rerank", "--warmup", "--reps", "--latency-k"):
+            with quiet_stderr(), self.assertRaises(SystemExit):
+                cli.build_parser().parse_args([flag, "1"] if flag in ("--warmup", "--reps", "--latency-k") else [flag])
 
     def test_parser_rejects_out_of_grid_k(self):
         with quiet_stderr(), self.assertRaises(SystemExit):
-            cli.build_parser().parse_args(["--k", "4"])
+            cli.build_parser().parse_args(["--k", "5"])
 
     def test_parser_accepts_subset_grid_k(self):
-        args = cli.build_parser().parse_args(["--k", "1,5"])
-        self.assertEqual(args.k, (1, 5))
-
-
-class LatencySelectionTest(unittest.TestCase):
-    def test_main_rejects_latency_k_outside_the_sweep(self):
-        # Fails during validation, before any ingest/serve work.
-        with quiet_stderr(), self.assertRaises(SystemExit):
-            cli.main(["--k", "1,3,5", "--latency-k", "7"])
+        args = cli.build_parser().parse_args(["--k", "3,20"])
+        self.assertEqual(args.k, (3, 20))
 
 
 if __name__ == "__main__":

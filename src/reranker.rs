@@ -6,20 +6,17 @@
 //! [`crate::config::RERANKER_API_KEY`], never from the tracked config.
 //!
 //! Calls are best-effort: [`Reranker::rerank`] returns an error on any protocol
-//! or transport failure.
+//! or transport failure. Documents are sent in the order the store supplies
+//! them (the fused order), so provider indexes map directly back to it.
 
-use std::collections::{HashMap, HashSet, VecDeque};
-use std::sync::Mutex;
+use std::collections::HashSet;
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 
 use crate::config::RerankerConfig;
-
-/// Maximum number of query→ranking entries kept when caching is enabled.
-const CACHE_CAPACITY: usize = 256;
+use crate::eval_metrics::{self, RerankStatus, Usage};
 
 /// A scored input document, in the provider's relevance order.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -30,20 +27,20 @@ pub struct Ranked {
     pub score: f32,
 }
 
-/// A configured cloud reranker and, optionally, a score cache.
+/// A configured cloud reranker.
 pub struct Reranker {
     http: reqwest::Client,
     endpoint: String,
     model: String,
     token: String,
     candidates: u64,
-    cache: Option<Mutex<ScoreCache>>,
+    log_eval_metrics: bool,
 }
 
 impl Reranker {
     /// Builds the client from config, reading the token and failing fast when
-    /// it is missing. `cache` enables the bounded score cache.
-    pub fn from_config(config: &RerankerConfig, cache: bool) -> Result<Self> {
+    /// it is missing. `log_eval_metrics` enables structured per-call logging.
+    pub fn from_config(config: &RerankerConfig, log_eval_metrics: bool) -> Result<Self> {
         if config.candidates == 0 {
             bail!("[reranker].candidates must be greater than zero");
         }
@@ -57,7 +54,7 @@ impl Reranker {
             token,
             config.candidates,
             Duration::from_millis(config.timeout_ms),
-            cache.then(|| Mutex::new(ScoreCache::new(CACHE_CAPACITY))),
+            log_eval_metrics,
         )
     }
 
@@ -67,7 +64,7 @@ impl Reranker {
         token: String,
         candidates: u64,
         timeout: Duration,
-        cache: Option<Mutex<ScoreCache>>,
+        log_eval_metrics: bool,
     ) -> Result<Self> {
         let http = reqwest::Client::builder()
             .timeout(timeout)
@@ -79,7 +76,7 @@ impl Reranker {
             model: model.to_owned(),
             token,
             candidates,
-            cache,
+            log_eval_metrics,
         })
     }
 
@@ -88,28 +85,57 @@ impl Reranker {
         self.candidates
     }
 
-    /// Scores `documents` against `question`, best first. Results are cached
-    /// when enabled; cache hits never reach the provider.
-    ///
-    /// Candidates are sorted before hashing and requesting, because Qdrant's
-    /// fused order is not guaranteed stable across identical queries. Cached
-    /// indexes are in sorted space and mapped back to the caller's order.
+    /// Scores `documents` against `question`, best first. Every call reaches
+    /// the provider; a measured `rerank` line is logged when eval metrics are on
+    /// (on both success and failure).
     pub async fn rerank(&self, question: &str, documents: &[String]) -> Result<Vec<Ranked>> {
-        let order = canonical_order(documents);
-        let sorted: Vec<&str> = order
-            .iter()
-            .map(|&index| documents[index].as_str())
-            .collect();
-        let key = cache_key(&self.model, question, &sorted);
-        if let Some(cached) = self.cached(key) {
-            return Ok(to_original(&order, cached));
-        }
-
         let started = Instant::now();
+        match self.score(question, documents).await {
+            Ok((ranked, usage)) => {
+                if self.log_eval_metrics {
+                    eval_metrics::log_rerank(
+                        question,
+                        &self.model,
+                        documents.len(),
+                        ranked.len(),
+                        started.elapsed(),
+                        RerankStatus::Success,
+                        usage.as_ref(),
+                        None,
+                    );
+                }
+                Ok(ranked)
+            }
+            Err(error) => {
+                if self.log_eval_metrics {
+                    eval_metrics::log_rerank(
+                        question,
+                        &self.model,
+                        documents.len(),
+                        0,
+                        started.elapsed(),
+                        RerankStatus::Failed,
+                        None,
+                        Some(&format!("{error:#}")),
+                    );
+                } else {
+                    // Preserve the operator-visible warning when metrics are off.
+                    eprintln!("serve: rerank failed (falling back to fusion): {error:#}");
+                }
+                Err(error)
+            }
+        }
+    }
+
+    async fn score(
+        &self,
+        question: &str,
+        documents: &[String],
+    ) -> Result<(Vec<Ranked>, Option<Usage>)> {
         let body = RequestBody {
             model: &self.model,
             query: question,
-            documents: &sorted,
+            documents,
         };
         let response = self
             .http
@@ -130,27 +156,8 @@ impl Reranker {
         }
 
         let reply: Reply = serde_json::from_str(&raw).context("failed to parse rerank response")?;
-        let ranked = rank(reply.results, sorted.len())?;
-        log_call(
-            &self.model,
-            documents.len(),
-            ranked.len(),
-            started.elapsed(),
-            reply.usage.as_ref(),
-        );
-
-        if let Some(cache) = &self.cache {
-            cache
-                .lock()
-                .expect("rerank cache lock poisoned")
-                .insert(key, ranked.clone());
-        }
-        Ok(to_original(&order, ranked))
-    }
-
-    fn cached(&self, key: [u8; 32]) -> Option<Vec<Ranked>> {
-        let cache = self.cache.as_ref()?;
-        cache.lock().expect("rerank cache lock poisoned").get(key)
+        let ranked = rank(reply.results, documents.len())?;
+        Ok((ranked, reply.usage))
     }
 }
 
@@ -159,25 +166,7 @@ impl Reranker {
 struct RequestBody<'a> {
     model: &'a str,
     query: &'a str,
-    documents: &'a [&'a str],
-}
-
-/// Indexes into `documents` ordered by text, tie-broken by original index.
-fn canonical_order(documents: &[String]) -> Vec<usize> {
-    let mut order: Vec<usize> = (0..documents.len()).collect();
-    order.sort_by(|&a, &b| documents[a].cmp(&documents[b]).then(a.cmp(&b)));
-    order
-}
-
-/// Maps indexes in sorted-candidate space back to the caller's order.
-fn to_original(order: &[usize], ranked: Vec<Ranked>) -> Vec<Ranked> {
-    ranked
-        .into_iter()
-        .map(|item| Ranked {
-            index: order[item.index],
-            score: item.score,
-        })
-        .collect()
+    documents: &'a [String],
 }
 
 #[derive(Deserialize)]
@@ -191,18 +180,6 @@ struct Reply {
 struct ReplyItem {
     index: usize,
     relevance_score: f64,
-}
-
-/// Only the fields this app reports are read; provider extras (`document`,
-/// `id`, `balance`, ...) are ignored.
-#[derive(Deserialize)]
-struct Usage {
-    #[serde(default)]
-    total_tokens: Option<u64>,
-    #[serde(default)]
-    cost: Option<f64>,
-    #[serde(default)]
-    cost_rub: Option<f64>,
 }
 
 /// Sorts, de-duplicates, and validates provider results. Out-of-range indexes
@@ -230,34 +207,6 @@ fn rank(items: Vec<ReplyItem>, document_count: usize) -> Result<Vec<Ranked>> {
     Ok(ranked)
 }
 
-/// One compact line per real provider call, for the eval's cost aggregation.
-/// The format is intentionally stable: `rerank model=... docs=... results=...
-/// duration_ms=... tokens=... cost=... cost_rub=...`.
-fn log_call(
-    model: &str,
-    documents: usize,
-    results: usize,
-    elapsed: Duration,
-    usage: Option<&Usage>,
-) {
-    let mut line = format!(
-        "rerank model={model} docs={documents} results={results} duration_ms={}",
-        elapsed.as_millis()
-    );
-    if let Some(usage) = usage {
-        if let Some(tokens) = usage.total_tokens {
-            line.push_str(&format!(" tokens={tokens}"));
-        }
-        if let Some(cost) = usage.cost {
-            line.push_str(&format!(" cost={cost}"));
-        }
-        if let Some(cost) = usage.cost_rub {
-            line.push_str(&format!(" cost_rub={cost}"));
-        }
-    }
-    eprintln!("{line}");
-}
-
 /// A bounded error-body excerpt, keeping logs readable on huge provider errors.
 fn body_excerpt(body: &str) -> String {
     const MAX: usize = 200;
@@ -270,55 +219,6 @@ fn body_excerpt(body: &str) -> String {
         end -= 1;
     }
     format!("{}...", &body[..end])
-}
-
-/// Cache key over the model, question, and ordered candidate texts. Length
-/// prefixes keep concatenated documents unambiguous.
-fn cache_key(model: &str, question: &str, documents: &[&str]) -> [u8; 32] {
-    let mut hasher = Sha256::new();
-    for field in std::iter::once(model)
-        .chain(std::iter::once(question))
-        .chain(documents.iter().copied())
-    {
-        hasher.update((field.len() as u64).to_le_bytes());
-        hasher.update(field.as_bytes());
-    }
-    hasher.finalize().into()
-}
-
-/// FIFO-bounded score cache. The active collection and model are fixed for a
-/// server's lifetime, so entries never go stale; eviction only bounds memory.
-struct ScoreCache {
-    capacity: usize,
-    entries: HashMap<[u8; 32], Vec<Ranked>>,
-    order: VecDeque<[u8; 32]>,
-}
-
-impl ScoreCache {
-    fn new(capacity: usize) -> Self {
-        Self {
-            capacity,
-            entries: HashMap::new(),
-            order: VecDeque::new(),
-        }
-    }
-
-    fn get(&self, key: [u8; 32]) -> Option<Vec<Ranked>> {
-        self.entries.get(&key).cloned()
-    }
-
-    fn insert(&mut self, key: [u8; 32], ranked: Vec<Ranked>) {
-        if self.entries.contains_key(&key) {
-            return;
-        }
-        while self.order.len() >= self.capacity {
-            if let Some(oldest) = self.order.pop_front() {
-                self.entries.remove(&oldest);
-            }
-        }
-        self.order.push_back(key);
-        self.entries.insert(key, ranked);
-    }
 }
 
 #[cfg(test)]
@@ -372,45 +272,8 @@ mod tests {
         assert!(ranked(r#"{"results":[{"index":9,"relevance_score":1.0}]}"#, 3).is_err());
     }
 
-    #[test]
-    fn cache_key_separates_document_boundaries() {
-        let left = cache_key("m", "q", &["ab", "c"]);
-        let right = cache_key("m", "q", &["a", "bc"]);
-        assert_ne!(left, right);
-        assert_eq!(left, cache_key("m", "q", &["ab", "c"]));
-    }
-
-    #[test]
-    fn canonical_order_is_independent_of_input_order() {
-        let documents = vec!["c".to_owned(), "a".to_owned(), "b".to_owned()];
-        let order = canonical_order(&documents);
-        assert_eq!(order, vec![1, 2, 0]);
-        assert_eq!(
-            order
-                .iter()
-                .map(|&index| documents[index].as_str())
-                .collect::<Vec<_>>(),
-            vec!["a", "b", "c"]
-        );
-    }
-
-    #[test]
-    fn cache_evicts_the_oldest_entry() {
-        let mut cache = ScoreCache::new(2);
-        let a = cache_key("m", "a", &[]);
-        let b = cache_key("m", "b", &[]);
-        let c = cache_key("m", "c", &[]);
-        cache.insert(a, Vec::new());
-        cache.insert(b, Vec::new());
-        cache.insert(c, Vec::new());
-
-        assert!(cache.get(a).is_none());
-        assert!(cache.get(b).is_some());
-        assert!(cache.get(c).is_some());
-    }
-
     #[tokio::test]
-    async fn posts_the_jina_shape_and_caches_repeated_queries() {
+    async fn posts_the_jina_shape_in_fused_order_without_caching() {
         use axum::{
             Json, Router,
             extract::State,
@@ -445,7 +308,7 @@ mod tests {
                         );
                         assert_eq!(body["model"], "rerank-3");
                         assert_eq!(body["query"], "question");
-                        assert_eq!(body["documents"], serde_json::json!(["a", "b", "c"]));
+                        assert_eq!(body["documents"], serde_json::json!(["c", "b", "a"]));
                         (
                             StatusCode::OK,
                             Json(serde_json::json!({
@@ -470,24 +333,23 @@ mod tests {
             "secret".to_owned(),
             30,
             Duration::from_secs(2),
-            Some(Mutex::new(ScoreCache::new(4))),
+            false,
         )
         .unwrap();
-        let reversed = vec!["c".to_owned(), "b".to_owned(), "a".to_owned()];
-        let sorted = vec!["a".to_owned(), "b".to_owned(), "c".to_owned()];
+        let documents = vec!["c".to_owned(), "b".to_owned(), "a".to_owned()];
 
-        let first = reranker.rerank("question", &reversed).await.unwrap();
-        let second = reranker.rerank("question", &sorted).await.unwrap();
+        let first = reranker.rerank("question", &documents).await.unwrap();
+        let second = reranker.rerank("question", &documents).await.unwrap();
 
-        let reranked_texts = |ranked: &[Ranked], documents: &[String]| {
+        let reranked_texts = |ranked: &[Ranked]| {
             ranked
                 .iter()
                 .map(|item| documents[item.index].clone())
                 .collect::<Vec<_>>()
         };
-        assert_eq!(reranked_texts(&first, &reversed), vec!["c", "a"]);
-        assert_eq!(reranked_texts(&second, &sorted), vec!["c", "a"]);
-        assert_eq!(calls.load(Ordering::SeqCst), 1);
+        assert_eq!(reranked_texts(&first), vec!["a", "c"]);
+        assert_eq!(reranked_texts(&second), vec!["a", "c"]);
+        assert_eq!(calls.load(Ordering::SeqCst), 2);
         server.abort();
     }
 }

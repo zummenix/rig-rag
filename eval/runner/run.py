@@ -17,7 +17,7 @@ from eval.questions import (
 )
 from eval.runner import results as results_mod
 from eval.runner.httpquery import QueryClient
-from eval.runner.metrics import K_VALUES, LATENCY_K, evaluate_at_k, percentile
+from eval.runner.metrics import K_VALUES, evaluate_at_k, mean, percentile
 from eval.runner.gold import source_of
 from eval.runner.paths import repo_relative
 from eval.runner.profiles import Profile, discover_profiles, parse_profile
@@ -37,10 +37,6 @@ class RunOptions:
     force_ingest: bool = False
     binary: str | None = None
     k_values: tuple[int, ...] = K_VALUES
-    warmup: int = 3
-    reps: int = 5
-    latency_k: int = LATENCY_K
-    cache_rerank: bool = False
     port: int = 0
     startup_timeout: float = 90.0
     hits: list[dict] = field(default_factory=list)
@@ -131,39 +127,78 @@ def _hit_record(profile: str, question: str, k: int, rank: int, hit: dict, data_
     }
 
 
+def _timing_summary(values: list[float | None]) -> dict:
+    """Percentiles across questions (one sample per question, not per trial)."""
+
+    present = [float(value) for value in values if value is not None]
+    return {
+        "samples_ms": present,
+        "p50_ms": percentile(present, 50),
+        "p95_ms": percentile(present, 95),
+        "mean_ms": mean(present),
+        "sum_ms": sum(present) if present else None,
+    }
+
+
+def _attach_log_metrics(per_question: list[dict], applicable: list[Question], log_path: Path) -> None:
+    """Joins the serve log's per-hash search/rerank lines onto the questions."""
+
+    parsed = serve_log.parse_log(log_path)
+    by_hash = {serve_log.question_hash(question.question): question for question in applicable}
+    if len(by_hash) != len(applicable):
+        raise RuntimeError(
+            f"profile questions are not unique by text in {log_path.parent.name!r}; "
+            "hash correlation would collapse their log records"
+        )
+
+    for record in per_question:
+        entry = parsed.get(serve_log.question_hash(record["question"])) or {}
+        search = entry.get("search") or {}
+        rerank = entry.get("rerank") or {}
+        record["timings"]["search_ms"] = search.get("duration_ms")
+        record["timings"]["rerank_ms"] = rerank.get("duration_ms")
+        record["rerank"] = (
+            {
+                "docs": rerank.get("docs"),
+                "results": rerank.get("results"),
+                "tokens": rerank.get("tokens"),
+                "cost": rerank.get("cost"),
+                "cost_rub": rerank.get("cost_rub"),
+                "status": rerank.get("status"),
+            }
+            if rerank
+            else None
+        )
+
+
 def _sweep(
     client: QueryClient,
     questions: list[Question],
     profile: Profile,
     options: RunOptions,
+    log_path: Path,
 ) -> dict:
+    """One uncached query per question at `max(k)`, then prefix truncation.
+
+    With `[reranker].candidates >= max(k)` (the eval profiles use the default
+    30), every smaller-k ranked list is an exact prefix of the `max(k)` list,
+    so truncating the returned hits is equivalent to querying at each k.
+    """
+
+    query_k = max(options.k_values)
     per_question: list[dict] = []
-    latency_samples: list[float] = []
-    cold_samples: list[float] = []
 
     for question in questions:
-        by_k: dict[str, dict] = {}
-        cold_ms: float | None = None
-        for index, k in enumerate(options.k_values):
-            hits, elapsed_ms = client.query(question.question, k)
-            if index == 0 and options.cache_rerank:
-                # The first retrieval query for a question is the only cache
-                # miss; later k values reuse the same candidate-set ranking.
-                cold_ms = round(elapsed_ms, 3)
-                cold_samples.append(cold_ms)
-            by_k[str(k)] = evaluate_at_k(hits, question, profile.data_root)
-            for rank, hit in enumerate(hits, start=1):
+        hits, elapsed_ms = client.query(question.question, query_k)
+        by_k = {
+            str(k): evaluate_at_k(hits[:k], question, profile.data_root)
+            for k in options.k_values
+        }
+        for k in options.k_values:
+            for rank, hit in enumerate(hits[:k], start=1):
                 options.hits.append(
                     _hit_record(profile.name, question.id, k, rank, hit, profile.data_root)
                 )
-
-        for _ in range(options.warmup):
-            client.query(question.question, options.latency_k)
-        latency_ms = []
-        for _ in range(options.reps):
-            _, elapsed_ms = client.query(question.question, options.latency_k)
-            latency_ms.append(round(elapsed_ms, 3))
-        latency_samples.extend(latency_ms)
 
         per_question.append(
             {
@@ -173,30 +208,26 @@ def _sweep(
                 "gold": results_mod.gold_entry(question),
                 "notes": question.notes,
                 "by_k": by_k,
-                "latency_ms": latency_ms,
-                "cold_ms": cold_ms,
+                "timings": {
+                    "e2e_ms": round(elapsed_ms, 3),
+                    "search_ms": None,
+                    "rerank_ms": None,
+                },
+                "rerank": None,
             }
         )
 
-    latency = {
-        "warmup": options.warmup,
-        "reps": options.reps,
-        "latency_k": options.latency_k,
-        "cache_rerank": options.cache_rerank,
-        "samples_ms": latency_samples,
-        "p50_ms": percentile(latency_samples, 50),
-        "p95_ms": percentile(latency_samples, 95),
-    }
-    if cold_samples:
-        latency["cold_samples_ms"] = cold_samples
-        latency["cold_p50_ms"] = percentile(cold_samples, 50)
-        latency["cold_p95_ms"] = percentile(cold_samples, 95)
+    _attach_log_metrics(per_question, questions, log_path)
 
     return {
         "prefix": profile.prefix,
         "data_root": profile.data_root,
         "source_names": sorted(profile.source_names()),
-        "latency": latency,
+        "timings": {
+            "search": _timing_summary([q["timings"]["search_ms"] for q in per_question]),
+            "rerank": _timing_summary([q["timings"]["rerank_ms"] for q in per_question]),
+            "e2e": _timing_summary([q["timings"]["e2e_ms"] for q in per_question]),
+        },
         "questions": per_question,
     }
 
@@ -299,9 +330,8 @@ def run(options: RunOptions) -> Path:
             port,
             log_path,
             startup_timeout=options.startup_timeout,
-            cache_rerank=options.cache_rerank,
         ) as client:
-            result = _sweep(client, applicable, profile, options)
+            result = _sweep(client, applicable, profile, options, log_path)
         result["collection"] = collection
         result["rerank"] = serve_log.rerank_stats(log_path)
         profile_results[profile.name] = result
@@ -317,7 +347,6 @@ def run(options: RunOptions) -> Path:
         environment=_environment(binary, qdrant_url, repo_root),
         profiles=profile_results,
         k_values=options.k_values,
-        latency_k=options.latency_k,
     )
 
     hits_path = results_mod.write_hits(run_dir, options.hits)

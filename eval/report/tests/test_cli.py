@@ -19,7 +19,7 @@ def quiet_stdout():
         yield
 
 
-def make_repo(root: Path, runs, source: str = "v1", experiment: str = "baseline") -> None:
+def make_repo(root: Path, runs, source: str = "v2", experiment: str = "baseline") -> None:
     """Plants `<root>/eval/results/<experiment>/<run>/results.json` for each run."""
 
     for run in runs:
@@ -53,7 +53,7 @@ class ReportMainTest(unittest.TestCase):
             other = root / "eval" / "results" / "baseline" / "2025-01-01T00-00-00Z"
             other.mkdir(parents=True)
             shutil.copyfile(
-                FIXTURES / "v1_legacy" / "results.json", other / "results.json"
+                FIXTURES / "v2" / "results.json", other / "results.json"
             )
             out = root / "custom" / "report.html"
             with quiet_stdout():

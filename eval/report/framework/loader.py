@@ -1,14 +1,10 @@
 """Version-aware loader for the `results.json` render input.
 
-`results.json` is a versioned contract (see `eval/runner/results.py`). Old
-experiments must stay renderable forever, so the framework keeps its own list of
-the schema versions it can draw and refuses anything else loudly rather than
-guessing at an unknown shape.
-
-The loader also papers over the small shape drift the v1 contract accumulated:
-the swept `k` set (`k_values`) and the pushed `commit_ref` were added after the
-first artifacts were produced, so they may be absent in an older v1 file. The
-accessors below derive what they can and fail clearly when they cannot.
+`results.json` is a versioned contract (see `eval/runner/results.py`). The
+framework renders schema v2 only: v1 artifacts predate the rerank-cache removal,
+their latency samples mix warm cache hits with uncached provider calls, and
+their metrics are not comparable. An unsupported version is refused loudly
+rather than guessed at.
 """
 
 from __future__ import annotations
@@ -17,12 +13,9 @@ import json
 from pathlib import Path
 
 # Every schema version this framework renders. Append when the contract's
-# `RESULTS_SCHEMA_VERSION` advances and rendering support lands; never reorder.
-SUPPORTED_SCHEMA_VERSIONS: tuple[int, ...] = (1,)
+# `RESULTS_SCHEMA_VERSION` advances and rendering support lands.
+SUPPORTED_SCHEMA_VERSIONS: tuple[int, ...] = (2,)
 LATEST_SCHEMA_VERSION: int = max(SUPPORTED_SCHEMA_VERSIONS)
-
-# The latency k recorded by the runner's default when a file predates the field.
-DEFAULT_LATENCY_K = 7
 
 _PROFILE_ORDER = ("single-project", "multi-project")
 
@@ -36,15 +29,22 @@ class UnsupportedSchemaVersion(ResultsError):
 
     def __init__(self, version: object, *, source: str = "results.json") -> None:
         known = ", ".join(str(item) for item in SUPPORTED_SCHEMA_VERSIONS)
-        relation = (
-            "newer than"
-            if isinstance(version, int) and version > LATEST_SCHEMA_VERSION
-            else "older than"
-        )
+        if version == 1:
+            detail = (
+                "v1 baselines predate cache removal and are not comparable; "
+                "record a v2 baseline instead"
+            )
+        else:
+            relation = (
+                "newer than"
+                if isinstance(version, int) and version > LATEST_SCHEMA_VERSION
+                else "older than"
+            )
+            detail = f"version is {relation} this report framework supports"
         super().__init__(
-            f"{source}: schema_version {version!r} is {relation} this report framework "
-            f"supports (known versions: {known}). Update eval/report/framework, or check "
-            "out a revision that knows this version."
+            f"{source}: schema_version {version!r} cannot be rendered ({detail}; "
+            f"known versions: {known}). Update eval/report/framework, or check out "
+            "a revision that knows this version."
         )
         self.version = version
 
@@ -110,50 +110,13 @@ def ordered_profiles(results: dict) -> list[str]:
     )
 
 
-def latency_k(results: dict) -> int:
-    """The k at which latency (and the labelled summaries) were measured."""
-
-    for profile in (results.get("profiles") or {}).values():
-        value = (profile.get("latency") or {}).get("latency_k")
-        if _is_int(value):
-            return value
-    return DEFAULT_LATENCY_K
-
-
-def _k_from_summary(results: dict) -> set[int]:
-    values: set[int] = set()
-    for profile in (results.get("summary") or {}).values():
-        for label in (profile.get("mean_recall") or {}):
-            if isinstance(label, str) and label.startswith("recall@"):
-                suffix = label.split("@", 1)[1]
-                if suffix.isdigit():
-                    values.add(int(suffix))
-    return values
-
-
-def _k_from_by_k(results: dict) -> set[int]:
-    values: set[int] = set()
-    for profile in (results.get("profiles") or {}).values():
-        for question in profile.get("questions", []):
-            for key in (question.get("by_k") or {}):
-                if str(key).isdigit():
-                    values.add(int(key))
-    return values
-
-
 def swept_k_values(results: dict) -> tuple[int, ...]:
-    """The swept k set, recorded explicitly or derived from an older v1 file."""
+    """The recorded `k_values`; a v2 file always carries them explicitly."""
 
     explicit = results.get("k_values")
-    if isinstance(explicit, list) and explicit:
-        values = {int(value) for value in explicit if _is_int(value)}
-        if values:
-            return tuple(sorted(values))
-
-    derived = _k_from_summary(results) | _k_from_by_k(results)
-    if derived:
-        return tuple(sorted(derived))
-    raise ResultsError(
-        "results.json records no k_values and has no by_k metrics to derive the "
-        "swept k set from"
-    )
+    if not isinstance(explicit, list):
+        raise ResultsError("results.json records no k_values")
+    values = {int(value) for value in explicit if _is_int(value)}
+    if not values:
+        raise ResultsError("results.json records no k_values")
+    return tuple(sorted(values))

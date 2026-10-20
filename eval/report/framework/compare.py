@@ -105,39 +105,42 @@ def ingest_metrics(document: dict | None) -> dict[str, float | None]:
 
 
 def retrieval_metrics(
-    results: dict, profile: str, k_values: tuple[int, ...], latency_k: int
+    results: dict, profile: str, k_values: tuple[int, ...]
 ) -> dict[str, float | None]:
     """One profile's aggregate retrieval metrics, keyed for the comparison table."""
 
     summary = (results.get("summary") or {}).get(profile) or {}
     mean_recall = summary.get("mean_recall") or {}
-    latency = summary.get("latency") or {}
+    timings = summary.get("timings") or {}
     metrics: dict[str, float | None] = {}
     for k in k_values:
         metrics[f"recall@{k}"] = mean_recall.get(f"recall@{k}")
-    metrics[f"purity@{latency_k}"] = summary.get(f"mean_purity@{latency_k}")
-    metrics[f"mrr@{latency_k}"] = summary.get(f"mean_mrr@{latency_k}")
-    # With --cache-rerank the recorded p50/p95 are warm cache hits; compare the
-    # provider-facing cold samples instead, or the baseline delta is meaningless.
-    cached = latency.get("cache_rerank") and latency.get("cold_p50_ms") is not None
-    metrics["p50_ms"] = latency.get("cold_p50_ms") if cached else latency.get("p50_ms")
-    metrics["p95_ms"] = latency.get("cold_p95_ms") if cached else latency.get("p95_ms")
+        metrics[f"purity@{k}"] = summary.get(f"mean_purity@{k}")
+        metrics[f"mrr@{k}"] = summary.get(f"mean_mrr@{k}")
+    metrics["search_p50_ms"] = (timings.get("search") or {}).get("p50_ms")
+    metrics["search_p95_ms"] = (timings.get("search") or {}).get("p95_ms")
+    metrics["rerank_p50_ms"] = (timings.get("rerank") or {}).get("p50_ms")
+    metrics["rerank_p95_ms"] = (timings.get("rerank") or {}).get("p95_ms")
+    metrics["p50_ms"] = (timings.get("e2e") or {}).get("p50_ms")
+    metrics["p95_ms"] = (timings.get("e2e") or {}).get("p95_ms")
     metrics["no_hit_rate"] = summary.get("unanswerable_no_hit_rate")
     return metrics
 
 
-def question_metrics(results: dict, profile: str, latency_k: int) -> dict[str, dict]:
-    """Per-question `recall@purity` at the latency k, keyed by question id."""
+def question_metrics(
+    results: dict, profile: str, k_values: tuple[int, ...]
+) -> dict[str, dict]:
+    """Per-question recall/purity/MRR at every k, keyed by question id."""
 
     out: dict[str, dict] = {}
     profile_document = (results.get("profiles") or {}).get(profile) or {}
     for question in profile_document.get("questions", []):
-        by_k = (question.get("by_k") or {}).get(str(latency_k)) or {}
-        out[question.get("id", "")] = {
-            "answerable": question.get("answerable", True),
-            "recall": by_k.get("recall"),
-            "purity": by_k.get("purity"),
-        }
+        entry: dict = {"answerable": question.get("answerable", True)}
+        for k in k_values:
+            by_k = (question.get("by_k") or {}).get(str(k)) or {}
+            entry[f"recall@{k}"] = by_k.get("recall")
+            entry[f"purity@{k}"] = by_k.get("purity")
+        out[question.get("id", "")] = entry
     return out
 
 

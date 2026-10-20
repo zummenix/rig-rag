@@ -17,6 +17,9 @@ Definitions (fixed and unit-tested, since `results.json` is a contract):
 Unanswerable questions (`gold == []`) have `recall`/`precision`/`mrr`/`purity`
 of `None` and report `no_hit` (1 when no hit clears the threshold) instead.
 
+One request is made per question at `max(k)`; `evaluate_at_k` receives the
+prefix of the returned list, so these definitions apply unchanged at every k.
+
 Percentiles use linear interpolation between order statistics (the numpy
 default), so p95 of a handful of samples is well-defined and deterministic.
 """
@@ -28,11 +31,9 @@ import math
 from eval.questions import Question
 from eval.runner.gold import covering_gold_indexes, source_of
 
-# k values swept for every applicable question.
-K_VALUES: tuple[int, ...] = (1, 3, 5, 7, 10, 20)
-
-# k at which per-question latency is measured (the request default).
-LATENCY_K: int = 7
+# k values reported for every applicable question. The eval asks once at
+# `max(K_VALUES)` and derives the smaller-k metrics by prefix truncation.
+K_VALUES: tuple[int, ...] = (3, 7, 20)
 
 
 def percentile(values: list[float], p: float) -> float | None:

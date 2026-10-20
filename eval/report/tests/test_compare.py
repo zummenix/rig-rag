@@ -1,6 +1,9 @@
 import unittest
+from pathlib import Path
 
-from eval.report.framework import Baseline, compare
+from eval.report.framework import Baseline, compare, load_results
+
+FIXTURES = Path(__file__).parent / "fixtures"
 
 
 class OrderedNamesTest(unittest.TestCase):
@@ -55,6 +58,33 @@ class IngestMetricsTest(unittest.TestCase):
         metrics = compare.ingest_metrics(document)
         self.assertTrue(metrics)
         self.assertTrue(all(value is None for value in metrics.values()))
+
+
+class RetrievalMetricsTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.results = load_results(FIXTURES / "v2" / "results.json")
+
+    def test_emits_every_metric_at_every_k(self):
+        metrics = compare.retrieval_metrics(self.results, "single-project", (3, 7, 20))
+        for k in (3, 7, 20):
+            for metric in ("recall", "purity", "mrr"):
+                self.assertIn(f"{metric}@{k}", metrics)
+
+    def test_reads_timings_by_phase(self):
+        metrics = compare.retrieval_metrics(self.results, "single-project", (3, 7, 20))
+        self.assertAlmostEqual(metrics["search_p50_ms"], 8.1)
+        self.assertAlmostEqual(metrics["search_p95_ms"], 8.37)
+        self.assertAlmostEqual(metrics["rerank_p50_ms"], 910.0)
+        self.assertAlmostEqual(metrics["p50_ms"], 10.35)  # e2e
+        self.assertAlmostEqual(metrics["p95_ms"], 11.925)
+
+    def test_question_metrics_are_keyed_per_k(self):
+        questions = compare.question_metrics(self.results, "single-project", (3, 7, 20))
+        author = questions["jj-author"]
+        self.assertEqual(author["recall@3"], 0.0)
+        self.assertEqual(author["recall@20"], 1.0)
+        self.assertEqual(questions["jj-new-change"]["purity@20"], 1.0)
 
 
 class CombinedProfilesTest(unittest.TestCase):

@@ -1,3 +1,5 @@
+use std::time::Instant;
+
 use anyhow::{Context, Result, bail};
 use fastembed::TextEmbedding;
 use qdrant_client::{
@@ -14,6 +16,7 @@ use uuid::Uuid;
 use crate::chunk::DocChunk;
 use crate::config::Config;
 use crate::embedding;
+use crate::eval_metrics;
 use crate::hashing;
 use crate::reranker::{Ranked, Reranker};
 
@@ -90,6 +93,7 @@ pub struct Store {
     collection: String,
     embed_tx: mpsc::Sender<EmbedRequest>,
     reranker: Option<Reranker>,
+    log_eval_metrics: bool,
 }
 
 impl Store {
@@ -105,14 +109,15 @@ impl Store {
             collection,
             embed_tx,
             reranker: None,
+            log_eval_metrics: false,
         }
     }
 
     /// Connects to Qdrant and returns a store bound to the collection named in
     /// the config, verifying that it exists and was built with the configured
-    /// model. When `[reranker]` is configured, `cache_rerank` enables its score
-    /// cache.
-    pub async fn connect(config: &Config, cache_rerank: bool) -> Result<Self> {
+    /// model. `log_eval_metrics` emits structured `search`/`rerank` lines for
+    /// the eval runner; it never changes retrieval behavior.
+    pub async fn connect(config: &Config, log_eval_metrics: bool) -> Result<Self> {
         let client = client(&config.qdrant.url)?;
         let active = &config.collection.active;
 
@@ -130,8 +135,9 @@ impl Store {
         verify_model(active, &config.embedding.model, &config.corpus.prefix)?;
         let model = embedding::load_slug(&config.embedding.model)?;
         let mut store = Self::new(client, active.clone(), model);
+        store.log_eval_metrics = log_eval_metrics;
         if let Some(reranker) = &config.reranker {
-            store.reranker = Some(Reranker::from_config(reranker, cache_rerank)?);
+            store.reranker = Some(Reranker::from_config(reranker, log_eval_metrics)?);
         }
         Ok(store)
     }
@@ -192,6 +198,7 @@ impl Store {
         k: u64,
         threshold: f32,
     ) -> Result<Vec<(DocChunk, f32)>> {
+        let started = Instant::now();
         let query_vector = self
             .embed_texts(vec![question.to_owned()])
             .await?
@@ -242,13 +249,15 @@ impl Store {
             })
             .collect::<Result<_>>()?;
 
+        if self.log_eval_metrics {
+            eval_metrics::log_search(question, k, hits.len(), started.elapsed());
+        }
+
         if let Some(reranker) = &self.reranker {
             let documents: Vec<String> = hits.iter().map(|(chunk, _)| chunk.text.clone()).collect();
-            match reranker.rerank(question, &documents).await {
-                Ok(ranked) => return Ok(select_reranked(hits, &ranked, k)),
-                Err(error) => {
-                    eprintln!("serve: rerank failed (falling back to fusion): {error:#}");
-                }
+            // On failure the reranker has already logged it and fusion is the fallback.
+            if let Ok(ranked) = reranker.rerank(question, &documents).await {
+                return Ok(select_reranked(hits, &ranked, k));
             }
         }
 

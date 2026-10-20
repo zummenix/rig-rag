@@ -6,7 +6,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from eval.runner.metrics import K_VALUES, LATENCY_K
+from eval.runner.metrics import K_VALUES
 from eval.runner.results import validate_metric_k
 from eval.runner.run import RunOptions, run
 
@@ -57,14 +57,6 @@ def build_parser() -> argparse.ArgumentParser:
         help="rebuild the target collection even when it already exists",
     )
     parser.add_argument(
-        "--cache-rerank",
-        action="store_true",
-        help=(
-            "start serve with --cache-rerank; the first k-sweep query per "
-            "question is recorded as a cold sample, later queries are warm"
-        ),
-    )
-    parser.add_argument(
         "--bin",
         default=None,
         help=(
@@ -79,17 +71,6 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "comma-separated subset of the contract k grid "
             f"({','.join(map(str, K_VALUES))}); default: all"
-        ),
-    )
-    parser.add_argument("--warmup", type=int, default=3, help="latency warmup calls per question")
-    parser.add_argument("--reps", type=int, default=5, help="latency repetitions per question")
-    parser.add_argument(
-        "--latency-k",
-        type=int,
-        default=LATENCY_K,
-        help=(
-            f"k used for latency measurement (default: {LATENCY_K}); "
-            "must be one of --k"
         ),
     )
     parser.add_argument(
@@ -123,7 +104,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     try:
-        k_values = validate_metric_k(args.k, args.latency_k)
+        k_values = validate_metric_k(args.k)
     except ValueError as error:
         parser.error(str(error))
 
@@ -141,10 +122,6 @@ def main(argv: list[str] | None = None) -> int:
         force_ingest=args.force_ingest,
         binary=args.bin,
         k_values=k_values,
-        warmup=args.warmup,
-        reps=args.reps,
-        latency_k=args.latency_k,
-        cache_rerank=args.cache_rerank,
         port=args.port,
         startup_timeout=args.startup_timeout,
     )
