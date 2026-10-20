@@ -14,7 +14,8 @@ timing run only under `--report`); **reproducible from a recorded revision**
 (corpus sources are pinned to SHAs, and a run records the revision it was
 measured at, best effort — the experiment record carries the human-facing
 story); and **versioned, tested contracts** (the results and ingest schemas ship
-with committed fixtures, so any earlier experiment stays renderable).
+with committed fixtures; `results.json` v1 is refused by design because its
+latency mixed warm cache hits with real provider calls).
 
 Layout:
 
@@ -104,10 +105,12 @@ The harness reuses the main binary; the eval-supporting additions are:
 
 Retrieval knobs stay **hardcoded** (an experiment edits the code/const); eval
 hits the existing `/api/query` endpoint, so there is no HTTP contract change.
-Reranking is the exception: a profile may carry `[reranker]`, and
-`--cache-rerank` starts `serve` with its in-process score cache. The runner
-records warm samples (cache hits), cold first-call samples, and provider
-usage/cost parsed from `serve-<profile>.log`.
+Reranking is the exception: a profile may carry `[reranker]`. The runner always
+starts `serve` with `--log-eval-metrics`, asks **one uncached query per
+question** at `max(k)` (no score cache, no warmup, no repetitions), and joins the server's
+`search`/`rerank` lines to each question by `sha256(question)[:16]` to split
+local search time, paid rerank time, and end-to-end time and to sum provider
+usage/cost.
 
 ## Questions
 
@@ -163,13 +166,16 @@ Per run under `eval/results/<experiment>/<run>/`:
 - `ingest-<profile>.json` — the Rust `ingest --report` document.
 - `serve-<profile>.log` — the server's captured stdout/stderr.
 
-`results.json` holds, per profile: the collection, the per-question `by_k`
-metrics, per-question latency samples, and profile-level p50/p95. The swept `k`
-set is recorded top-level as `k_values` (default `1,3,5,7,10,20`; a run may sweep
-a subset, e.g. `--k 1,3,5`); every `@k` label is derived from it. Across profiles
-it holds `degradation` (single → multi deltas over the shared questions) and
-`summary` (per-profile aggregates, including the unanswerable no-hit rate),
-both labelled at the run's `--latency-k`.
+`results.json` (schema v2) holds, per profile: the collection, the per-question
+`by_k` metrics, per-question `timings`/`rerank` entries, and profile-level
+`timings` for `search`, `rerank`, and `e2e`. The reported `k` set is recorded
+top-level as `k_values` (default `3,7,20`; a run may report a subset, e.g.
+`--k 3,20`). Each question is queried once at `max(k)` and smaller-k metrics are
+exact prefixes of that ranked list (the reranker's candidate pool covers it).
+Percentiles are across questions — one cold sample per question, not repeated
+trials. Across profiles it holds `degradation` (single → multi deltas for recall,
+purity, and MRR at every k) and `summary` (per-profile aggregates at every k,
+including the unanswerable no-hit rate and the timing rollup).
 
 ## Ingest report (`ingest --report`)
 
@@ -199,8 +205,9 @@ Notes:
 HTML document (inline CSS + SVG, no scripts, fonts, or network): a retrieval part
 (`results.json`) and one ingestion part per profile (`ingest-<profile>.json`).
 The report covers provenance (commit + ref when available + environment), a
-per-profile summary, mean recall@k with a per-question breakdown, latency, and
-cross-corpus degradation deltas.
+per-profile summary (recall/purity/MRR × k plus e2e p50/p95), mean recall@k with
+a per-question table per k, a Timing section (local search, paid rerank, and
+end-to-end charts plus a cost rollup), and cross-corpus degradation deltas.
 
 ```sh
 just eval-report baseline     # newest baseline run → eval/reports/baseline.html
@@ -212,9 +219,10 @@ declared measured commit are flags; see `just eval-report-help`.
 
 Both parts are **independently versioned, tested contracts**
 (`eval/report/framework/loader.py`, `ingest.py`): an unknown schema version is
-refused, and `eval/report/tests/fixtures/` commits a fixture per shape. An older
-v1 `results.json` still renders — the loader derives the swept k set and latency
-k. The ingestion section leads with `status` and marks a `reused` report as
+refused, and `eval/report/tests/fixtures/` commits a fixture per shape. A v1
+`results.json` is refused with a clear message: it predates the rerank-cache
+removal, its latency samples mixed warm and cold calls, and it is not
+comparable. The ingestion section leads with `status` and marks a `reused` report as
 **cost not measured** (a reused collection gathers no counts or tokens; measure
 real cost with `--force` or a new collection).
 
@@ -222,8 +230,9 @@ real cost with `--force` or a new collection).
 
 An experiment can declare a baseline run; the report then leads with a
 **Comparison** section diffing the two runs' ingest cost, retrieval aggregates
-(recall@k, purity@k, MRR@k, p50/p95, no-hit rate), and per-question
-recall/purity. The diff is computed at render time from the two committed runs —
+(recall@k, purity@k, MRR@k, search/rerank/e2e p50/p95, no-hit rate), and
+per-question recall/purity at every k. The diff is computed at render time from
+the two committed runs —
 no contract change, and either run stays independently renderable.
 
 ## Experiment lifecycle
@@ -245,8 +254,8 @@ a stage while an earlier one is uncommitted:
    prediction is fixed before the code that tests it exists.
 2. **Controlled change.** Make the controlled change in **one commit** that
    touches only system code, never the harness (the record, the runner, the
-   framework) or the render package. Pin `--profiles`, `--k`, `--latency-k`,
-   `--warmup`, and `--reps`, and confirm a baseline exists under the same
+   framework) or the render package. Pin `--profiles` and `--k`, and confirm a
+   baseline exists under the same
    profile definitions, pinned source revisions, and model — else re-record one
    and pin it by path.
 3. **Interpretation.** Run the treatment arm with the same profile definitions,
@@ -284,10 +293,10 @@ Fixed definitions (unit-tested in `eval/tests/test_metrics.py`):
 - Unanswerable questions report **no_hit** (1 when nothing clears the
   threshold) instead of recall/precision/MRR/purity.
 
-Percentiles use linear interpolation between order statistics. Latency is
-measured at `--latency-k` (default 7) after `--warmup` calls, over `--reps`
-sequential calls; retrieval itself is deterministic, so correctness is computed
-once per (question, k).
+Percentiles use linear interpolation between order statistics. Each question is
+queried exactly once, uncached, at `max(k)`; correctness at smaller k is computed
+from the returned list's prefix, and timings are split by the server's
+`search`/`rerank` lines. Percentiles are across questions, not repeated trials.
 
 Qualitative observations from the first full baseline run (both profiles) worth
 keeping:
@@ -314,8 +323,8 @@ keeping:
   score-based guard; until then its top RRF score is not a relevance signal.
 - **Profile drift.** Pinned SHAs freeze the corpora; refreshing a pin is itself a
   decision (and possibly an experiment).
-- **Latency noise.** Host/Qdrant warmth affects p95; keep warmups/reps consistent
-  and record the environment.
+- **Latency noise.** Host/Qdrant warmth and provider load affect p95; every
+  sample is a cold query, so record the environment with the run.
 - **Result size.** `hits.jsonl` + `results.json` per run can grow; the raw dumps
   (`hits.jsonl`, `serve-*.log`) are kept per-run and gitignored, while
   `results.json` (and `ingest-*.json`) are the committed artifacts — keep them

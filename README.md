@@ -83,15 +83,16 @@ The authorization token is read from `RERANKER_API_KEY` and sent as
 `Authorization: Bearer`; it is never stored in this tracked file. When the
 section is present, `serve` fetches `max(k, candidates)` fused hits, rescores
 them, and returns the best `k`. A reranker error or timeout falls back to the
-fused order with a warning. `serve --cache-rerank` adds an in-process score
-cache so repeated identical queries skip the cloud call.
+fused order with a warning. `serve --log-eval-metrics` emits structured
+per-query `search`/`rerank` lines to stderr (correlated by a hash of the
+question) for the eval runner; it never changes retrieval behavior.
 
 ## Commands
 
 | Command | Description |
 | --- | --- |
 | `rig-rag ingest [--force] [--report <path>]` | Fetch sources, embed the corpus, insert into a new collection (optionally write a JSON report) |
-| `rig-rag serve [--cache-rerank]` | Serve the retrieval/chat API + built UI over HTTP (optionally cache rerank scores) |
+| `rig-rag serve [--log-eval-metrics]` | Serve the retrieval/chat API + built UI over HTTP (optionally emit per-query eval metrics) |
 | `rig-rag promote <collection>` | Set the active collection in `rig-rag.toml` |
 | `rig-rag prune [--yes]` | Delete collections other than the active one (dry run without `--yes`) |
 | `rig-rag model` | Load the embedding model and print its id, dimensions, and configured reranker |
