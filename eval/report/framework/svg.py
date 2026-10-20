@@ -342,6 +342,95 @@ def grouped_bar_chart(
     return "".join(parts)
 
 
+def horizontal_grouped_bar_chart(
+    categories: list[str],
+    series: list[Series],
+    *,
+    value_format: str = "0.1f",
+    value_label: str = "",
+    title: str = "",
+    show_values: bool = False,
+    width: int = 920,
+    row_height: int = 44,
+) -> str:
+    """A grouped horizontal bar chart: one row per category, bars side by side.
+
+    Values share one unit (the caller's); the value axis runs left to right and
+    the unit label sits under it. `None` values leave a gap, like every other
+    chart primitive here.
+    """
+
+    for entry in series:
+        if len(entry.values) != len(categories):
+            raise ValueError(
+                f"series {entry.name!r} has {len(entry.values)} values for "
+                f"{len(categories)} categories"
+            )
+
+    values = [value for entry in series for value in entry.values if value is not None]
+    hi = max([0.0, *values])
+    hi = (hi or 1.0) * 1.08
+
+    frame = _Frame(
+        width,
+        _TOP_MARGIN + row_height * len(categories) + 34,
+        left=112,
+        right=16,
+        top=_TOP_MARGIN,
+        bottom=34,
+    )
+    parts = _svg_open(width, frame.height, title)
+
+    for tick in _ticks(0.0, hi, 5):
+        x = frame.x0 + frame.plot_w * (tick / hi)
+        parts.append(
+            f'<line x1="{x:.1f}" y1="{frame.y0:.1f}" x2="{x:.1f}" y2="{frame.y1:.1f}" '
+            f'stroke="{PALETTE["grid"]}" stroke-width="1"/>'
+        )
+        parts.append(
+            f'<text x="{x:.1f}" y="{frame.y1 + 18:.1f}" text-anchor="middle" '
+            f'font-family="{_FONT}" font-size="11" fill="{PALETTE["muted"]}">'
+            f"{_esc(format(tick, value_format))}</text>"
+        )
+
+    series_count = max(1, len(series))
+    bar_h = row_height * 0.62 / series_count
+    for category_index, category in enumerate(categories):
+        row_top = frame.y0 + row_height * category_index
+        parts.append(
+            f'<text x="{frame.x0 - 8:.1f}" y="{row_top + row_height * 0.58:.1f}" '
+            f'text-anchor="end" font-family="{_FONT}" font-size="11" '
+            f'fill="{PALETTE["ink"]}">{_esc(category)}</text>'
+        )
+        for series_index, entry in enumerate(series):
+            value = entry.values[category_index]
+            if value is None:
+                continue
+            y = row_top + row_height * 0.19 + series_index * bar_h
+            extent = frame.plot_w * (max(0.0, value) / hi)
+            parts.append(
+                f'<rect x="{frame.x0:.1f}" y="{y:.1f}" width="{max(1.0, extent):.1f}" '
+                f'height="{bar_h * 0.9:.1f}" rx="1.5" fill="{_esc(entry.color)}"/>'
+            )
+            if show_values:
+                parts.append(
+                    f'<text x="{frame.x0 + extent + 5:.1f}" y="{y + bar_h * 0.72:.1f}" '
+                    f'font-family="{_FONT}" font-size="10" fill="{PALETTE["ink"]}">'
+                    f"{_esc(format(value, value_format))}</text>"
+                )
+
+    if value_label:
+        parts.append(
+            f'<text x="{(frame.x0 + frame.x1) / 2:.1f}" y="{frame.height - 6:.1f}" '
+            f'text-anchor="middle" font-family="{_FONT}" font-size="11" '
+            f'fill="{PALETTE["muted"]}">{_esc(value_label)}</text>'
+        )
+
+    parts.append(_legend([(entry.name, entry.color, entry.dashed) for entry in series], frame))
+    parts.append("</svg>")
+    return "".join(parts)
+
+
 # One color per phase row in a waterfall, cycling if there are more rows.
 _PHASE_COLORS = (
     "#2563eb",  # blue

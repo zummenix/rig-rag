@@ -51,6 +51,36 @@ class GroupedBarChartTest(unittest.TestCase):
             svg.grouped_bar_chart(["p", "q"], [svg.Series("x", [0.1])])
 
 
+class HorizontalGroupedBarChartTest(unittest.TestCase):
+    def test_draws_two_bars_per_row_plus_legend_swatches(self):
+        out = svg.horizontal_grouped_bar_chart(
+            ["single-project", "multi-project"],
+            [
+                svg.Series("p50", [10.0, 20.0], svg.PALETTE["p50"]),
+                svg.Series("p95", [30.0, 40.0], svg.PALETTE["p95"]),
+            ],
+            value_label="milliseconds",
+        )
+        self.assertTrue(out.startswith("<svg"))
+        self.assertTrue(out.endswith("</svg>"))
+        self.assertEqual(out.count("<rect"), 6)  # 4 bars + 2 legend swatches
+        self.assertIn(">single-project<", out)
+        self.assertIn("milliseconds", out)
+
+    def test_none_values_leave_a_gap(self):
+        out = svg.horizontal_grouped_bar_chart(
+            ["p"],
+            [svg.Series("p50", [None])],
+        )
+        self.assertTrue(out.endswith("</svg>"))
+
+    def test_value_count_must_match_categories(self):
+        with self.assertRaises(ValueError):
+            svg.horizontal_grouped_bar_chart(
+                ["p", "q"], [svg.Series("x", [0.1])]
+            )
+
+
 class WaterfallTest(unittest.TestCase):
     def test_draws_one_bar_per_phase(self):
         out = svg.waterfall([("fetch", 1000.0), ("embed", 500.0)], total=2000.0)

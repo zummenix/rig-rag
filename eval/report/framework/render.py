@@ -7,9 +7,10 @@ retrieval-only, ingest-only, or combined document all render. Every part is
 validated by its own loader before anything is drawn.
 
 The document is assembled from the smaller `layout` helpers and `svg` figures:
-provenance, retrieval quality (mean recall@k plus a per-question breakdown),
-latency, cross-corpus degradation, ingestion cost, and the exact configuration
-the run was measured with. Nothing here reaches the network.
+provenance, retrieval quality (mean recall@k plus a per-question breakdown per
+k), timing (local search, paid rerank, and end-to-end), cross-corpus
+degradation, ingestion cost, and the exact configuration the run was measured
+with. Nothing here reaches the network.
 """
 
 from __future__ import annotations
@@ -94,7 +95,6 @@ def _header(title: str, results: dict | None, subtitle: str | None) -> str:
 def _provenance(
     results: dict | None,
     k_values: tuple[int, ...],
-    latency_k: int,
     ingest: list[dict],
     commit: str | None,
 ) -> str:
@@ -107,8 +107,8 @@ def _provenance(
         ]
         if results.get("commit_ref"):
             pairs.append(("Contained by", results["commit_ref"]))
-        pairs.append(("Swept k", ", ".join(str(k) for k in k_values)))
-        pairs.append(("Latency measured at", f"k={latency_k}"))
+        pairs.append(("Reported k", ", ".join(str(k) for k in k_values)))
+        pairs.append(("Queries", "one uncached query per question at max(k)"))
         environment = results.get("environment") or {}
     else:
         pairs = []
@@ -281,42 +281,40 @@ def _ingest_cost(document: dict) -> str:
     return body
 
 
-def _summary(results: dict, profiles: list[str], k_values: tuple[int, ...], latency_k: int) -> str:
+def _summary(results: dict, profiles: list[str], k_values: tuple[int, ...]) -> str:
     summary = results.get("summary") or {}
-    headers: list[object] = ["Profile", "Questions", "Answerable", "Unanswerable"]
-    headers += [f"recall@{k}" for k in k_values]
-    headers += [f"purity@{latency_k}", f"MRR@{latency_k}", "no-hit rate", "p50 ms", "p95 ms"]
-
-    rows: list[list[object]] = []
+    headers: list[object] = ["Metric"] + [f"@{k}" for k in k_values]
+    blocks: list[str] = []
     for name in profiles:
         entry = summary.get(name) or {}
         mean_recall = entry.get("mean_recall") or {}
-        latency = entry.get("latency") or {}
-        row: list[object] = [
-            name,
-            _number(entry.get("questions_applied")),
-            _number(entry.get("answerable")),
-            _number(entry.get("unanswerable")),
+        rows: list[list[object]] = [
+            ["recall"] + [_number(mean_recall.get(f"recall@{k}")) for k in k_values],
+            ["purity"]
+            + [_number(entry.get(f"mean_purity@{k}")) for k in k_values],
+            ["MRR"] + [_number(entry.get(f"mean_mrr@{k}")) for k in k_values],
         ]
-        row += [_number(mean_recall.get(f"recall@{k}")) for k in k_values]
-        row += [
-            _number(entry.get(f"mean_purity@{latency_k}")),
-            _number(entry.get(f"mean_mrr@{latency_k}")),
-            _percent(entry.get("unanswerable_no_hit_rate")),
-            _number(latency.get("p50_ms"), digits=2),
-            _number(latency.get("p95_ms"), digits=2),
-        ]
-        rows.append(row)
+        e2e = (entry.get("timings") or {}).get("e2e") or {}
+        blocks.append(f"<h3>{layout.esc(name)}</h3>")
+        blocks.append(layout.table(headers, rows, numeric_from=1))
+        blocks.append(
+            layout.kv_table(
+                [
+                    ("Questions", _number(entry.get("questions_applied"))),
+                    ("Answerable", _number(entry.get("answerable"))),
+                    ("Unanswerable", _number(entry.get("unanswerable"))),
+                    ("No-hit rate", _percent(entry.get("unanswerable_no_hit_rate"))),
+                    ("e2e p50", f"{_number(e2e.get('p50_ms'), digits=2)} ms"),
+                    ("e2e p95", f"{_number(e2e.get('p95_ms'), digits=2)} ms"),
+                ]
+            )
+        )
 
-    return layout.section(
-        "Summary",
-        layout.Raw(layout.table(headers, rows, numeric_from=1)),
-        anchor="summary",
-    )
+    return layout.section("Summary", layout.Raw("".join(blocks)), anchor="summary")
 
 
 def _quality(
-    results: dict, profiles: list[str], k_values: tuple[int, ...], latency_k: int
+    results: dict, profiles: list[str], k_values: tuple[int, ...]
 ) -> str:
     summary = results.get("summary") or {}
     series = []
@@ -344,160 +342,145 @@ def _quality(
     blocks = [figure]
     for name in profiles:
         profile = (results.get("profiles") or {}).get(name) or {}
-        headers = [
-            "id",
-            "Question",
-            "Answerable",
-            f"hit@{latency_k}",
-            f"recall@{latency_k}",
-            f"precision@{latency_k}",
-            f"MRR@{latency_k}",
-            f"purity@{latency_k}",
-            "hits returned",
-        ]
-        rows: list[list[object]] = []
-        for question in profile.get("questions", []):
-            by_k = (question.get("by_k") or {}).get(str(latency_k)) or {}
-            if question.get("answerable", True):
-                row: list[object] = [
-                    question.get("id", ""),
-                    question.get("question", ""),
-                    "yes",
-                    _number(by_k.get("hit"), digits=0),
-                    _number(by_k.get("recall")),
-                    _number(by_k.get("precision")),
-                    _number(by_k.get("mrr")),
-                    _number(by_k.get("purity")),
-                    _number(by_k.get("hits_returned")),
-                ]
-            else:
-                row = [
-                    question.get("id", ""),
-                    question.get("question", ""),
-                    "no (negative)",
-                    f"no_hit={_number(by_k.get('no_hit'), digits=0)}",
-                    DASH,
-                    DASH,
-                    DASH,
-                    DASH,
-                    _number(by_k.get("hits_returned")),
-                ]
-            rows.append(row)
         blocks.append(f"<h3>{layout.esc(name)}</h3>")
-        blocks.append(layout.table(headers, rows, numeric_from=3))
+        for k in k_values:
+            headers = [
+                "id",
+                "Question",
+                "Answerable",
+                f"hit@{k}",
+                f"recall@{k}",
+                f"precision@{k}",
+                f"MRR@{k}",
+                f"purity@{k}",
+                "hits returned",
+            ]
+            rows: list[list[object]] = []
+            for question in profile.get("questions", []):
+                by_k = (question.get("by_k") or {}).get(str(k)) or {}
+                if question.get("answerable", True):
+                    row: list[object] = [
+                        question.get("id", ""),
+                        question.get("question", ""),
+                        "yes",
+                        _number(by_k.get("hit"), digits=0),
+                        _number(by_k.get("recall")),
+                        _number(by_k.get("precision")),
+                        _number(by_k.get("mrr")),
+                        _number(by_k.get("purity")),
+                        _number(by_k.get("hits_returned")),
+                    ]
+                else:
+                    row = [
+                        question.get("id", ""),
+                        question.get("question", ""),
+                        "no (negative)",
+                        f"no_hit={_number(by_k.get('no_hit'), digits=0)}",
+                        DASH,
+                        DASH,
+                        DASH,
+                        DASH,
+                        _number(by_k.get("hits_returned")),
+                    ]
+                rows.append(row)
+            blocks.append(f"<h4>k={k}</h4>")
+            blocks.append(layout.table(headers, rows, numeric_from=3))
 
     return layout.section("Retrieval quality", layout.Raw("".join(blocks)), anchor="quality")
 
 
-def _latency(results: dict, profiles: list[str]) -> str:
-    p50 = []
-    p95 = []
-    cold = []
-    rows: list[list[object]] = []
-    cached = False
-    for name in profiles:
-        latency = ((results.get("profiles") or {}).get(name) or {}).get("latency") or {}
-        p50.append(latency.get("p50_ms"))
-        p95.append(latency.get("p95_ms"))
-        cold_p50 = latency.get("cold_p50_ms")
-        cold.append(cold_p50)
-        is_cached = bool(latency.get("cache_rerank"))
-        cached = cached or is_cached
-        rows.append(
+_TIMING_PHASES = (
+    ("search", "Search (local: embed + Qdrant)"),
+    ("rerank", "Rerank (paid provider)"),
+    ("e2e", "End-to-end (HTTP)"),
+)
+
+
+def _timing(results: dict, profiles: list[str]) -> str:
+    blocks: list[str] = []
+    for phase, label in _TIMING_PHASES:
+        p50: list[float | None] = []
+        p95: list[float | None] = []
+        for name in profiles:
+            profile = (results.get("profiles") or {}).get(name) or {}
+            entry = (profile.get("timings") or {}).get(phase) or {}
+            p50.append(entry.get("p50_ms"))
+            p95.append(entry.get("p95_ms"))
+        chart = svg.horizontal_grouped_bar_chart(
+            profiles,
             [
-                name,
-                "on" if is_cached else "off",
-                _number(latency.get("warmup")),
-                _number(latency.get("reps")),
-                _number(latency.get("latency_k")),
-                _number(latency.get("p50_ms"), digits=2),
-                _number(latency.get("p95_ms"), digits=2),
-                _number(cold_p50, digits=2),
-                _number(len(latency.get("samples_ms") or [])),
-            ]
+                svg.Series("p50", p50, svg.PALETTE["p50"]),
+                svg.Series("p95", p95, svg.PALETTE["p95"]),
+            ],
+            value_format="0.0f",
+            value_label="milliseconds",
+            show_values=True,
+            title=f"{label} by profile",
+        )
+        blocks.append(f"<h3>{layout.esc(label)}</h3>")
+        blocks.append(
+            layout.figure(
+                layout.Raw(chart),
+                "p50/p95 across questions (one cold sample per question), not "
+                "repeated trials.",
+            )
         )
 
-    series = [
-        svg.Series("p50", p50, svg.PALETTE["p50"]),
-        svg.Series("p95", p95, svg.PALETTE["p95"]),
-    ]
-    if any(value is not None for value in cold):
-        series.append(svg.Series("cold p50", cold, svg.PALETTE.get("cold", "#c26a00")))
-    chart = svg.grouped_bar_chart(
-        profiles,
-        series,
-        value_format="0.1f",
-        y_label="milliseconds",
-        title="Query latency by profile",
-    )
-    caption = "Sequential /api/query latency after warmup, measured at the profile's latency k."
-    if cached:
-        caption += (
-            " With --cache-rerank, p50/p95 are warm cache hits; cold p50 is the"
-            " first (provider) call per question."
+    aggregate: list[list[object]] = []
+    for phase, label in _TIMING_PHASES:
+        for name in profiles:
+            profile = (results.get("profiles") or {}).get(name) or {}
+            entry = (profile.get("timings") or {}).get(phase) or {}
+            aggregate.append(
+                [
+                    label,
+                    name,
+                    _number(entry.get("mean_ms"), digits=2),
+                    _number(entry.get("p50_ms"), digits=2),
+                    _number(entry.get("p95_ms"), digits=2),
+                    _number(entry.get("sum_ms"), digits=2),
+                ]
+            )
+    blocks.append("<h3>Aggregate</h3>")
+    blocks.append(
+        layout.table(
+            ["Phase", "Profile", "mean ms", "p50 ms", "p95 ms", "sum ms"],
+            aggregate,
+            numeric_from=2,
         )
-    body = layout.figure(layout.Raw(chart), caption)
-    body += layout.table(
-        [
-            "Profile",
-            "cache",
-            "warmup",
-            "reps",
-            "latency k",
-            "p50 ms",
-            "p95 ms",
-            "cold p50 ms",
-            "samples",
-        ],
-        rows,
-        numeric_from=2,
     )
-    return layout.section("Latency", layout.Raw(body), anchor="latency")
 
-
-def _rerank(results: dict, profiles: list[str]) -> str:
-    rows: list[list[object]] = []
-    any_usage = False
+    rerank_rows: list[list[object]] = []
+    any_calls = False
     for name in profiles:
         rerank = ((results.get("profiles") or {}).get(name) or {}).get("rerank") or {}
         calls = rerank.get("calls") or 0
-        failures = rerank.get("failures") or 0
-        any_usage = any_usage or calls > 0 or failures > 0
-        rows.append(
+        any_calls = any_calls or calls > 0
+        rerank_rows.append(
             [
                 name,
                 _number(calls),
-                _number(failures),
+                _number(rerank.get("failures")),
                 _number(rerank.get("documents")),
                 _number(rerank.get("tokens")),
                 _number(rerank.get("cost"), digits=6),
                 _number(rerank.get("cost_rub"), digits=6),
-                _number(rerank.get("p50_ms"), digits=2),
-                _number(rerank.get("p95_ms"), digits=2),
             ]
         )
+    if any_calls:
+        blocks.append("<h3>Rerank cost</h3>")
+        blocks.append(
+            layout.table(
+                ["Profile", "calls", "failures", "documents", "tokens", "cost", "cost RUB"],
+                rerank_rows,
+                numeric_from=1,
+            )
+        )
 
-    if not any_usage:
-        return ""
-    body = layout.table(
-        [
-            "Profile",
-            "calls",
-            "failures",
-            "documents",
-            "tokens",
-            "cost",
-            "cost RUB",
-            "cloud p50 ms",
-            "cloud p95 ms",
-        ],
-        rows,
-        numeric_from=1,
-    )
-    return layout.section("Rerank usage", layout.Raw(body), anchor="rerank")
+    return layout.section("Timing", layout.Raw("".join(blocks)), anchor="timing")
 
 
-def _degradation(results: dict, k_values: tuple[int, ...], latency_k: int) -> str:
+def _degradation(results: dict, k_values: tuple[int, ...]) -> str:
     degradation = results.get("degradation") or {}
     if not degradation:
         return layout.section(
@@ -509,14 +492,16 @@ def _degradation(results: dict, k_values: tuple[int, ...], latency_k: int) -> st
     entry = next(iter(degradation.values()))
     compared = entry.get("questions_compared") or []
     shared = f"{len(compared)} ({', '.join(compared)})" if compared else _number(0)
-    pairs: list[tuple[str, object]] = [
+    facts: list[tuple[str, object]] = [
         ("From → to", f"{entry.get('from', '')} → {entry.get('to', '')}"),
         ("Shared questions", shared),
+        ("Δ e2e p95 ms", _number(entry.get("p95_ms"), digits=2)),
     ]
-    for k in k_values:
-        pairs.append((f"Δ recall@{k}", _number(entry.get(f"recall@{k}"))))
-    pairs.append((f"Δ purity@{latency_k}", _number(entry.get(f"purity@{latency_k}"))))
-    pairs.append(("Δ p95 ms", _number(entry.get("p95_ms"), digits=2)))
+    rows: list[list[object]] = []
+    for metric, label in (("recall", "Δ recall"), ("purity", "Δ purity"), ("mrr", "Δ MRR")):
+        rows.append(
+            [label] + [_number(entry.get(f"{metric}@{k}")) for k in k_values]
+        )
 
     delta_chart = svg.grouped_bar_chart(
         [f"k={k}" for k in k_values],
@@ -526,7 +511,10 @@ def _degradation(results: dict, k_values: tuple[int, ...], latency_k: int) -> st
         y_label="Δ mean recall@k",
         title="Cross-corpus recall degradation",
     )
-    body = layout.kv_table(pairs)
+    body = layout.kv_table(facts)
+    body += layout.table(
+        ["Metric"] + [f"@{k}" for k in k_values], rows, numeric_from=1
+    )
     body += layout.figure(
         layout.Raw(delta_chart),
         "Multi-project minus single-project mean recall@k over the shared questions.",
@@ -565,7 +553,19 @@ def _methodology(has_retrieval: bool, has_ingest: bool) -> str:
             (
                 "no-hit rate",
                 "for unanswerable questions, the share of (question, k) pairs with no hit "
-                "above the threshold, averaged over every unanswerable question and swept k.",
+                "above the threshold, averaged over every unanswerable question and reported k.",
+            ),
+            (
+                "reported k",
+                "one uncached query per question at max(k); smaller-k metrics are exact "
+                "prefixes of that ranked list because the reranker's candidate pool covers "
+                "max(k). There is no warmup or repetition.",
+            ),
+            (
+                "timing",
+                "search = embedding + Qdrant; rerank = the paid provider call; e2e = the "
+                "client's HTTP round trip. Percentiles are across questions (one cold "
+                "sample per question), not repeated trials.",
             ),
         ]
     if has_ingest:
@@ -670,7 +670,6 @@ def _comparison(
     candidate_ingest: list[dict],
     baseline: compare.Baseline,
     k_values: tuple[int, ...],
-    latency_k: int,
     commit: str | None = None,
 ) -> str:
     profiles = compare.combined_profiles(candidate_results, tuple(candidate_ingest), baseline)
@@ -745,21 +744,27 @@ def _comparison(
     # ---- retrieval ----
     if candidate_results is not None and baseline.results is not None:
         cand_ret = {
-            profile: compare.retrieval_metrics(candidate_results, profile, k_values, latency_k)
+            profile: compare.retrieval_metrics(candidate_results, profile, k_values)
             for profile in profiles
         }
         base_ret = {
-            profile: compare.retrieval_metrics(baseline.results, profile, k_values, latency_k)
+            profile: compare.retrieval_metrics(baseline.results, profile, k_values)
             for profile in profiles
         }
-        spec: list[tuple[str, str, str]] = [
-            (f"recall@{k}", f"recall@{k}", "ratio") for k in k_values
-        ]
+        spec: list[tuple[str, str, str]] = []
+        for k in k_values:
+            spec.append((f"recall@{k}", f"recall@{k}", "ratio"))
+        for k in k_values:
+            spec.append((f"purity@{k}", f"purity@{k}", "ratio"))
+        for k in k_values:
+            spec.append((f"mrr@{k}", f"MRR@{k}", "ratio"))
         spec += [
-            (f"purity@{latency_k}", f"purity@{latency_k}", "ratio"),
-            (f"mrr@{latency_k}", f"MRR@{latency_k}", "ratio"),
-            ("p50_ms", "p50 ms", "ms2"),
-            ("p95_ms", "p95 ms", "ms2"),
+            ("search_p50_ms", "search p50 ms", "ms2"),
+            ("search_p95_ms", "search p95 ms", "ms2"),
+            ("rerank_p50_ms", "rerank p50 ms", "ms2"),
+            ("rerank_p95_ms", "rerank p95 ms", "ms2"),
+            ("p50_ms", "e2e p50 ms", "ms2"),
+            ("p95_ms", "e2e p95 ms", "ms2"),
             ("no_hit_rate", "no-hit rate", "ratio"),
         ]
         headers = ["Metric"]
@@ -811,37 +816,45 @@ def _comparison(
         )
         blocks.append(body)
 
-        # ---- per question ----
-        qheaders: list[object] = ["Profile", "id"]
+        # ---- per question, across every reported k ----
+        qheaders: list[object] = ["Profile", "id", "k"]
         qheaders += [
-            f"recall@{latency_k} base",
-            f"recall@{latency_k} cand",
+            "recall base",
+            "recall cand",
             "Δ recall",
-            f"purity@{latency_k} base",
-            f"purity@{latency_k} cand",
+            "purity base",
+            "purity cand",
             "Δ purity",
         ]
         qrows: list[list[object]] = []
         for profile in profiles:
-            base_q = compare.question_metrics(baseline.results, profile, latency_k)
-            cand_q = compare.question_metrics(candidate_results, profile, latency_k)
+            base_q = compare.question_metrics(baseline.results, profile, k_values)
+            cand_q = compare.question_metrics(candidate_results, profile, k_values)
             for qid in list(cand_q) + [q for q in base_q if q not in cand_q]:
                 base_q_entry = base_q.get(qid, {})
                 cand_q_entry = cand_q.get(qid, {})
-                recall_delta = compare.delta(base_q_entry.get("recall"), cand_q_entry.get("recall"))
-                purity_delta = compare.delta(base_q_entry.get("purity"), cand_q_entry.get("purity"))
-                qrows.append(
-                    [
-                        profile,
-                        qid,
-                        _fmt_metric(base_q_entry.get("recall"), "ratio"),
-                        _fmt_metric(cand_q_entry.get("recall"), "ratio"),
-                        _delta_cell(recall_delta),
-                        _fmt_metric(base_q_entry.get("purity"), "ratio"),
-                        _fmt_metric(cand_q_entry.get("purity"), "ratio"),
-                        _delta_cell(purity_delta),
-                    ]
-                )
+                for k in k_values:
+                    recall_key = f"recall@{k}"
+                    purity_key = f"purity@{k}"
+                    recall_delta = compare.delta(
+                        base_q_entry.get(recall_key), cand_q_entry.get(recall_key)
+                    )
+                    purity_delta = compare.delta(
+                        base_q_entry.get(purity_key), cand_q_entry.get(purity_key)
+                    )
+                    qrows.append(
+                        [
+                            profile,
+                            qid,
+                            str(k),
+                            _fmt_metric(base_q_entry.get(recall_key), "ratio"),
+                            _fmt_metric(cand_q_entry.get(recall_key), "ratio"),
+                            _delta_cell(recall_delta),
+                            _fmt_metric(base_q_entry.get(purity_key), "ratio"),
+                            _fmt_metric(cand_q_entry.get(purity_key), "ratio"),
+                            _delta_cell(purity_delta),
+                        ]
+                    )
         body = "<h3>Per question</h3>" + layout.table(qheaders, qrows, numeric_from=2)
         blocks.append(body)
 
@@ -879,12 +892,10 @@ def render_report(
     if results is not None:
         loader.validate_results(results)
         k_values = loader.swept_k_values(results)
-        latency_k = loader.latency_k(results)
         profiles = loader.ordered_profiles(results)
         name = experiment or str(results.get("experiment") or "experiment")
     else:
         k_values = ()
-        latency_k = loader.DEFAULT_LATENCY_K
         profiles = []
         name = experiment or ""
 
@@ -908,17 +919,16 @@ def render_report(
     ingest_path_list = list(ingest_paths)
     parts = [
         _header(title, results, subtitle),
-        _provenance(results, k_values, latency_k, ingest_docs, commit),
+        _provenance(results, k_values, ingest_docs, commit),
         _notes(notes) if notes else "",
-        _comparison(results, ingest_docs, baseline, k_values, latency_k, commit=commit)
+        _comparison(results, ingest_docs, baseline, k_values, commit=commit)
         if baseline is not None
         else "",
         _ingestion(ingest_docs, ingest_path_list) if ingest_docs else "",
-        _summary(results, profiles, k_values, latency_k) if results is not None else "",
-        _quality(results, profiles, k_values, latency_k) if results is not None else "",
-        _latency(results, profiles) if results is not None else "",
-        _rerank(results, profiles) if results is not None else "",
-        _degradation(results, k_values, latency_k) if results is not None else "",
+        _summary(results, profiles, k_values) if results is not None else "",
+        _quality(results, profiles, k_values) if results is not None else "",
+        _timing(results, profiles) if results is not None else "",
+        _degradation(results, k_values) if results is not None else "",
         _appendix(results, profiles) if results is not None else "",
         _methodology(results is not None, bool(ingest_docs)),
         _footer(results, results_path, ingest_docs, ingest_path_list),

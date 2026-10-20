@@ -22,7 +22,7 @@ def render_fixture(name):
 class RenderCurrentTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.html = render_fixture("v1")
+        cls.html = render_fixture("v2")
 
     def test_is_a_complete_document(self):
         self.assertTrue(self.html.startswith("<!doctype html>"))
@@ -38,7 +38,7 @@ class RenderCurrentTest(unittest.TestCase):
             "Provenance",
             "Summary",
             "Retrieval quality",
-            "Latency",
+            "Timing",
             "Cross-corpus degradation",
             "Appendix",
             "Methodology",
@@ -50,9 +50,24 @@ class RenderCurrentTest(unittest.TestCase):
         self.assertIn("jj-author", self.html)
         self.assertIn("unanswerable-license", self.html)
 
-    def test_renders_precision_at_the_latency_k(self):
-        # precision is a contract metric, so it must be inspectable in the table
-        self.assertIn("precision@7", self.html)
+    def test_renders_precision_at_every_k(self):
+        # precision is a contract metric, so it must be inspectable per k
+        for k in (3, 7, 20):
+            self.assertIn(f"precision@{k}", self.html)
+
+    def test_has_one_per_question_table_per_k(self):
+        for k in (3, 7, 20):
+            self.assertIn(f"<h4>k={k}</h4>", self.html)
+
+    def test_timing_section_has_three_phase_charts_and_rerank_cost(self):
+        timing = self.html.split('id="timing"', 1)[1].split('id="degradation"', 1)[0]
+        self.assertEqual(timing.count("<svg"), 3)
+        self.assertIn("Rerank cost", timing)
+        self.assertIn("failures", timing)
+
+    def test_quality_metrics_are_not_reported_at_a_single_latency_k(self):
+        self.assertNotIn("Latency measured at", self.html)
+        self.assertNotIn("latency k", self.html.lower())
 
     def test_subsection_headings_do_not_skip_a_level(self):
         # each section is an <h2>, so its subsections must be <h3>, not <h4>
@@ -67,30 +82,30 @@ class RenderCurrentTest(unittest.TestCase):
             self.assertNotIn(needle, lowered)
 
     def test_escapes_untrusted_text(self):
-        results = load_results(FIXTURES / "v1" / "results.json")
+        results = load_results(FIXTURES / "v2" / "results.json")
         results["experiment"] = "<script>alert(1)</script>"
         html = render_report(results)
         self.assertNotIn("<script>alert(1)</script>", html)
         self.assertIn("&lt;script&gt;alert(1)&lt;/script&gt;", html)
 
     def test_title_override_is_escaped(self):
-        results = load_results(FIXTURES / "v1" / "results.json")
+        results = load_results(FIXTURES / "v2" / "results.json")
         html = render_report(results, title="Custom <title>")
         self.assertIn("<title>Custom &lt;title&gt;</title>", html)
 
     def test_notes_render(self):
-        results = load_results(FIXTURES / "v1" / "results.json")
+        results = load_results(FIXTURES / "v2" / "results.json")
         html = render_report(results, notes=["drop small chunks"])
         self.assertIn("drop small chunks", html)
 
     def test_unknown_version_is_refused(self):
-        results = load_results(FIXTURES / "v1" / "results.json")
+        results = load_results(FIXTURES / "v2" / "results.json")
         results["schema_version"] = 99
         with self.assertRaises(UnsupportedSchemaVersion):
             render_report(results)
 
     def test_degradation_deltas_are_formatted(self):
-        results = load_results(FIXTURES / "v1" / "results.json")
+        results = load_results(FIXTURES / "v2" / "results.json")
         entry = results["degradation"]["single-project->multi-project"]
         entry["p95_ms"] = 1.0298999999999996
         entry["recall@7"] = -0.33333333333333337
@@ -101,19 +116,19 @@ class RenderCurrentTest(unittest.TestCase):
         self.assertIn("-0.333", html)
 
 
-class RenderLegacyTest(unittest.TestCase):
-    def test_legacy_fixture_renders(self):
-        html = render_fixture("v1_legacy")
-        self.assertIn("<svg", html)
-        # The swept k set is derived from the file; both labels reach the chart.
-        self.assertIn(">1<", html)
-        self.assertIn(">7<", html)
+class RenderV1RefusalTest(unittest.TestCase):
+    def test_v1_results_are_refused(self):
+        results = load_results(FIXTURES / "v2" / "results.json")
+        results["schema_version"] = 1
+        with self.assertRaises(UnsupportedSchemaVersion) as caught:
+            render_report(results)
+        self.assertIn("not comparable", str(caught.exception))
 
 
 class RenderIngestTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.results = load_results(FIXTURES / "v1" / "results.json")
+        cls.results = load_results(FIXTURES / "v2" / "results.json")
         cls.ingest = load_ingest(FIXTURES / "ingest" / "v1" / "ingest-single-project.json")
         cls.reused = load_ingest(FIXTURES / "ingest" / "v1_reused" / "ingest-single-project.json")
 
@@ -176,7 +191,7 @@ class NumberFormatTest(unittest.TestCase):
 
 class RenderComparisonTest(unittest.TestCase):
     def setUp(self):
-        self.baseline_results = load_results(FIXTURES / "v1" / "results.json")
+        self.baseline_results = load_results(FIXTURES / "v2" / "results.json")
         self.baseline_ingest = load_ingest(FIXTURES / "ingest" / "v1" / "ingest-single-project.json")
         # A deep copy the test can perturb without touching the fixture.
         self.candidate_results = json.loads(json.dumps(self.baseline_results))

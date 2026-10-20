@@ -1,0 +1,582 @@
+{
+  "schema_version": 2,
+  "experiment": "baseline",
+  "run": "2026-10-10T12-00-00Z",
+  "started_at": "2026-10-10T12:00:00Z",
+  "commit": "f57809d1c2b3a4d5e6f708192a3b4c5d6e7f8091",
+  "commit_ref": "origin/main",
+  "config": {
+    "single-project": {
+      "rig-rag.toml": {
+        "qdrant": {
+          "url": "http://localhost:6334"
+        },
+        "embedding": {
+          "model": "bge-small-en-v1.5"
+        },
+        "corpus": {
+          "prefix": "eval-single-project",
+          "data_root": "data/single-project"
+        },
+        "collection": {
+          "active": "eval-single-project-bge-small-en-v1-5-f017d3d86bc1"
+        }
+      },
+      "sources.json": [
+        {
+          "name": "jj",
+          "url": "https://github.com/jj-vcs/jj",
+          "ref": "9a1ad09b16e87d5d5e25759e5027953f8257be98"
+        }
+      ]
+    },
+    "multi-project": {
+      "rig-rag.toml": {
+        "qdrant": {
+          "url": "http://localhost:6334"
+        },
+        "embedding": {
+          "model": "bge-small-en-v1.5"
+        },
+        "corpus": {
+          "prefix": "eval-multi-project",
+          "data_root": "data/multi-project"
+        },
+        "collection": {
+          "active": "eval-multi-project-bge-small-en-v1-5-a3ea89d89f3c"
+        }
+      },
+      "sources.json": [
+        {
+          "name": "jj",
+          "url": "https://github.com/jj-vcs/jj",
+          "ref": "9a1ad09b16e87d5d5e25759e5027953f8257be98"
+        },
+        {
+          "name": "podman",
+          "url": "https://github.com/containers/podman",
+          "ref": "e3ed4e39137fbe457dbf09c4a9d66d6e1f31e365"
+        },
+        {
+          "name": "qdrant",
+          "url": "https://github.com/qdrant/qdrant",
+          "ref": "9855e50fc739de44a223a1c50faced806a868b6a"
+        }
+      ]
+    }
+  },
+  "environment": {
+    "os": "darwin",
+    "arch": "arm64",
+    "python": "3.11.9",
+    "binary": "target/release/rig-rag",
+    "binary_sha256": "0f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c4b5a69788796a5b4c3d2e1f0",
+    "qdrant_url": "http://localhost:6334"
+  },
+  "k_values": [
+    3,
+    7,
+    20
+  ],
+  "profiles": {
+    "single-project": {
+      "collection": "eval-single-project-bge-small-en-v1-5-f017d3d86bc1",
+      "prefix": "eval-single-project",
+      "data_root": "data/single-project",
+      "source_names": [
+        "jj"
+      ],
+      "timings": {
+        "search": {
+          "samples_ms": [
+            7.8,
+            8.4
+          ],
+          "p50_ms": 8.1,
+          "p95_ms": 8.370000000000001,
+          "mean_ms": 8.1,
+          "sum_ms": 16.2
+        },
+        "rerank": {
+          "samples_ms": [
+            880.0,
+            940.0
+          ],
+          "p50_ms": 910.0,
+          "p95_ms": 937.0,
+          "mean_ms": 910.0,
+          "sum_ms": 1820.0
+        },
+        "e2e": {
+          "samples_ms": [
+            8.6,
+            12.1
+          ],
+          "p50_ms": 10.35,
+          "p95_ms": 11.924999999999999,
+          "mean_ms": 10.35,
+          "sum_ms": 20.7
+        }
+      },
+      "rerank": {
+        "calls": 2,
+        "documents": 60,
+        "tokens": 78,
+        "cost": 0.000702,
+        "cost_rub": 0.06,
+        "duration_ms": [
+          880.0,
+          940.0
+        ],
+        "p50_ms": 880.0,
+        "p95_ms": 940.0,
+        "failures": 0
+      },
+      "questions": [
+        {
+          "id": "jj-new-change",
+          "question": "How do I create a new change in jj?",
+          "answerable": true,
+          "gold": [
+            {
+              "source": "jj",
+              "path": "testimonials.md",
+              "must_contain": "project creator and leader"
+            }
+          ],
+          "notes": "How-to.",
+          "by_k": {
+            "3": {
+              "answerable": true,
+              "hits_returned": 1,
+              "no_hit": null,
+              "hit": 1,
+              "recall": 1.0,
+              "precision": 0.5,
+              "mrr": 1.0,
+              "purity": 1.0,
+              "hits": [
+                "cli-reference.md:10-12"
+              ]
+            },
+            "7": {
+              "answerable": true,
+              "hits_returned": 2,
+              "no_hit": null,
+              "hit": 1,
+              "recall": 1.0,
+              "precision": 0.5,
+              "mrr": 1.0,
+              "purity": 1.0,
+              "hits": [
+                "cli-reference.md:10-12"
+              ]
+            },
+            "20": {
+              "answerable": true,
+              "hits_returned": 3,
+              "no_hit": null,
+              "hit": 1,
+              "recall": 1.0,
+              "precision": 0.5,
+              "mrr": 1.0,
+              "purity": 1.0,
+              "hits": [
+                "cli-reference.md:10-12"
+              ]
+            }
+          },
+          "timings": {
+            "e2e_ms": 8.6,
+            "search_ms": 8.0,
+            "rerank_ms": 900.0
+          },
+          "rerank": {
+            "docs": 30,
+            "results": 30,
+            "tokens": 39,
+            "cost": 0.000351,
+            "cost_rub": 0.03,
+            "status": "success"
+          }
+        },
+        {
+          "id": "jj-author",
+          "question": "Who is the author of jj?",
+          "answerable": true,
+          "gold": [
+            {
+              "source": "jj",
+              "path": "testimonials.md",
+              "must_contain": "project creator and leader"
+            }
+          ],
+          "notes": "Paraphrase gap.",
+          "by_k": {
+            "3": {
+              "answerable": true,
+              "hits_returned": 1,
+              "no_hit": null,
+              "hit": 0,
+              "recall": 0.0,
+              "precision": 0.0,
+              "mrr": 0.0,
+              "purity": 1.0,
+              "hits": [
+                "config.md:5-8"
+              ]
+            },
+            "7": {
+              "answerable": true,
+              "hits_returned": 2,
+              "no_hit": null,
+              "hit": 0,
+              "recall": 0.0,
+              "precision": 0.0,
+              "mrr": 0.0,
+              "purity": 1.0,
+              "hits": [
+                "config.md:5-8"
+              ]
+            },
+            "20": {
+              "answerable": true,
+              "hits_returned": 3,
+              "no_hit": null,
+              "hit": 1,
+              "recall": 1.0,
+              "precision": 0.5,
+              "mrr": 0.5,
+              "purity": 1.0,
+              "hits": [
+                "config.md:5-8",
+                "testimonials.md:1-4"
+              ]
+            }
+          },
+          "timings": {
+            "e2e_ms": 12.1,
+            "search_ms": 8.0,
+            "rerank_ms": 900.0
+          },
+          "rerank": {
+            "docs": 30,
+            "results": 30,
+            "tokens": 39,
+            "cost": 0.000351,
+            "cost_rub": 0.03,
+            "status": "success"
+          }
+        }
+      ]
+    },
+    "multi-project": {
+      "collection": "eval-multi-project-bge-small-en-v1-5-a3ea89d89f3c",
+      "prefix": "eval-multi-project",
+      "data_root": "data/multi-project",
+      "source_names": [
+        "jj",
+        "podman",
+        "qdrant"
+      ],
+      "timings": {
+        "search": {
+          "samples_ms": [
+            9.1,
+            10.0
+          ],
+          "p50_ms": 9.55,
+          "p95_ms": 9.955,
+          "mean_ms": 9.55,
+          "sum_ms": 19.1
+        },
+        "rerank": {
+          "samples_ms": [
+            1200.0,
+            2001.0
+          ],
+          "p50_ms": 1600.5,
+          "p95_ms": 1960.9499999999998,
+          "mean_ms": 1600.5,
+          "sum_ms": 3201.0
+        },
+        "e2e": {
+          "samples_ms": [
+            14.4,
+            15.2
+          ],
+          "p50_ms": 14.8,
+          "p95_ms": 15.16,
+          "mean_ms": 14.8,
+          "sum_ms": 29.6
+        }
+      },
+      "rerank": {
+        "calls": 2,
+        "documents": 60,
+        "tokens": 39,
+        "cost": 0.000351,
+        "cost_rub": 0.03,
+        "duration_ms": [
+          1200.0,
+          2001.0
+        ],
+        "p50_ms": 1200.0,
+        "p95_ms": 2001.0,
+        "failures": 1
+      },
+      "questions": [
+        {
+          "id": "jj-new-change",
+          "question": "How do I create a new change in jj?",
+          "answerable": true,
+          "gold": [
+            {
+              "source": "jj",
+              "path": "testimonials.md",
+              "must_contain": "project creator and leader"
+            }
+          ],
+          "notes": "How-to; cross-corpus competition.",
+          "by_k": {
+            "3": {
+              "answerable": true,
+              "hits_returned": 1,
+              "no_hit": null,
+              "hit": 0,
+              "recall": 0.0,
+              "precision": 0.0,
+              "mrr": 0.0,
+              "purity": 0.5,
+              "hits": [
+                "config.md:5-8",
+                "podman-run.md:3"
+              ]
+            },
+            "7": {
+              "answerable": true,
+              "hits_returned": 2,
+              "no_hit": null,
+              "hit": 0,
+              "recall": 0.0,
+              "precision": 0.0,
+              "mrr": 0.0,
+              "purity": 0.5,
+              "hits": [
+                "config.md:5-8",
+                "podman-run.md:3"
+              ]
+            },
+            "20": {
+              "answerable": true,
+              "hits_returned": 3,
+              "no_hit": null,
+              "hit": 0,
+              "recall": 0.0,
+              "precision": 0.0,
+              "mrr": 0.0,
+              "purity": 0.5,
+              "hits": [
+                "config.md:5-8",
+                "podman-run.md:3"
+              ]
+            }
+          },
+          "timings": {
+            "e2e_ms": 14.4,
+            "search_ms": 8.0,
+            "rerank_ms": 900.0
+          },
+          "rerank": {
+            "docs": 30,
+            "results": 30,
+            "tokens": 39,
+            "cost": 0.000351,
+            "cost_rub": 0.03,
+            "status": "success"
+          }
+        },
+        {
+          "id": "unanswerable-license",
+          "question": "Which license did the maintainers choose, and why?",
+          "answerable": false,
+          "gold": [],
+          "notes": "Expected: no hit above threshold.",
+          "by_k": {
+            "3": {
+              "answerable": false,
+              "hits_returned": 1,
+              "no_hit": 0,
+              "hit": null,
+              "recall": null,
+              "precision": null,
+              "mrr": null,
+              "purity": null,
+              "hits": [
+                "config.md:1-2"
+              ]
+            },
+            "7": {
+              "answerable": false,
+              "hits_returned": 2,
+              "no_hit": 0,
+              "hit": null,
+              "recall": null,
+              "precision": null,
+              "mrr": null,
+              "purity": null,
+              "hits": [
+                "config.md:1-2",
+                "patch.md:5"
+              ]
+            },
+            "20": {
+              "answerable": false,
+              "hits_returned": 2,
+              "no_hit": 0,
+              "hit": null,
+              "recall": null,
+              "precision": null,
+              "mrr": null,
+              "purity": null,
+              "hits": [
+                "config.md:1-2",
+                "patch.md:5"
+              ]
+            }
+          },
+          "timings": {
+            "e2e_ms": 15.2,
+            "search_ms": 8.0,
+            "rerank_ms": 900.0
+          },
+          "rerank": {
+            "docs": 30,
+            "results": 0,
+            "tokens": null,
+            "cost": null,
+            "cost_rub": null,
+            "status": "failed"
+          }
+        }
+      ]
+    }
+  },
+  "degradation": {
+    "single-project->multi-project": {
+      "from": "single-project",
+      "to": "multi-project",
+      "questions_compared": [
+        "jj-new-change"
+      ],
+      "recall@3": -1.0,
+      "recall@7": -1.0,
+      "recall@20": -1.0,
+      "purity@3": -0.5,
+      "purity@7": -0.5,
+      "purity@20": -0.5,
+      "mrr@3": -1.0,
+      "mrr@7": -1.0,
+      "mrr@20": -1.0,
+      "p95_ms": 3.235000000000001
+    }
+  },
+  "summary": {
+    "single-project": {
+      "questions_applied": 2,
+      "answerable": 2,
+      "unanswerable": 0,
+      "mean_recall": {
+        "recall@3": 0.5,
+        "recall@7": 0.5,
+        "recall@20": 1.0
+      },
+      "mean_purity@3": 1.0,
+      "mean_purity@7": 1.0,
+      "mean_purity@20": 1.0,
+      "mean_mrr@3": 0.5,
+      "mean_mrr@7": 0.5,
+      "mean_mrr@20": 0.75,
+      "unanswerable_no_hit_rate": null,
+      "timings": {
+        "search": {
+          "p50_ms": 8.1,
+          "p95_ms": 8.370000000000001,
+          "mean_ms": 8.1
+        },
+        "rerank": {
+          "p50_ms": 910.0,
+          "p95_ms": 937.0,
+          "mean_ms": 910.0
+        },
+        "e2e": {
+          "p50_ms": 10.35,
+          "p95_ms": 11.924999999999999,
+          "mean_ms": 10.35
+        }
+      },
+      "rerank": {
+        "calls": 2,
+        "documents": 60,
+        "tokens": 78,
+        "cost": 0.000702,
+        "cost_rub": 0.06,
+        "duration_ms": [
+          880.0,
+          940.0
+        ],
+        "p50_ms": 880.0,
+        "p95_ms": 940.0,
+        "failures": 0
+      }
+    },
+    "multi-project": {
+      "questions_applied": 2,
+      "answerable": 1,
+      "unanswerable": 1,
+      "mean_recall": {
+        "recall@3": 0.0,
+        "recall@7": 0.0,
+        "recall@20": 0.0
+      },
+      "mean_purity@3": 0.5,
+      "mean_purity@7": 0.5,
+      "mean_purity@20": 0.5,
+      "mean_mrr@3": 0.0,
+      "mean_mrr@7": 0.0,
+      "mean_mrr@20": 0.0,
+      "unanswerable_no_hit_rate": 0.0,
+      "timings": {
+        "search": {
+          "p50_ms": 9.55,
+          "p95_ms": 9.955,
+          "mean_ms": 9.55
+        },
+        "rerank": {
+          "p50_ms": 1600.5,
+          "p95_ms": 1960.9499999999998,
+          "mean_ms": 1600.5
+        },
+        "e2e": {
+          "p50_ms": 14.8,
+          "p95_ms": 15.16,
+          "mean_ms": 14.8
+        }
+      },
+      "rerank": {
+        "calls": 2,
+        "documents": 60,
+        "tokens": 39,
+        "cost": 0.000351,
+        "cost_rub": 0.03,
+        "duration_ms": [
+          1200.0,
+          2001.0
+        ],
+        "p50_ms": 1200.0,
+        "p95_ms": 2001.0,
+        "failures": 1
+      }
+    }
+  }
+}
