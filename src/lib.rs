@@ -1,6 +1,7 @@
 pub mod chunk;
 pub mod config;
 pub mod embedding;
+pub mod eval_metrics;
 pub mod fetch;
 pub mod hashing;
 pub mod ingest;

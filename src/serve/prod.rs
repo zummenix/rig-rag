@@ -20,9 +20,9 @@ pub struct QdrantRetriever {
 
 impl QdrantRetriever {
     /// Connects and verifies the active collection (fails fast at startup).
-    /// `cache_rerank` enables the optional reranker's score cache.
-    pub async fn connect(config: &Config, cache_rerank: bool) -> Result<Self> {
-        let store = Store::connect(config, cache_rerank).await?;
+    /// `log_eval_metrics` enables structured per-query eval logging.
+    pub async fn connect(config: &Config, log_eval_metrics: bool) -> Result<Self> {
+        let store = Store::connect(config, log_eval_metrics).await?;
         Ok(Self { store })
     }
 }

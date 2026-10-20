@@ -43,9 +43,9 @@ enum Command {
         /// Directory of built UI assets to serve at `/`
         #[arg(long)]
         site_dir: Option<PathBuf>,
-        /// Cache rerank scores in memory (requires [reranker])
+        /// Emit structured per-query eval metrics to stderr (`search`/`rerank` lines)
         #[arg(long)]
-        cache_rerank: bool,
+        log_eval_metrics: bool,
     },
     /// Load the embedding model and print its identity
     Model,
@@ -75,12 +75,12 @@ async fn main() -> Result<()> {
         Command::Serve {
             bind,
             site_dir,
-            cache_rerank,
+            log_eval_metrics,
         } => {
             serve::run(serve::ServeArgs {
                 bind,
                 site_dir,
-                cache_rerank,
+                log_eval_metrics,
                 config_path: config,
             })
             .await
