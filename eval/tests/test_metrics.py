@@ -1,7 +1,17 @@
 import unittest
 
 from eval.questions import Gold, Question
-from eval.runner.metrics import delta, evaluate_at_k, mean, percentile
+from eval.runner.metrics import K_VALUES, delta, evaluate_at_k, mean, percentile
+
+
+class KValuesTest(unittest.TestCase):
+    def test_contract_grid(self):
+        self.assertEqual(K_VALUES, (3, 7, 20))
+
+    def test_latency_k_is_gone(self):
+        import eval.runner.metrics as metrics
+
+        self.assertFalse(hasattr(metrics, "LATENCY_K"))
 
 
 def make_hit(index, path, start=1, end=2, text="body"):

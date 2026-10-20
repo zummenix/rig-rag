@@ -39,6 +39,16 @@ def unanswered_entry():
     }
 
 
+def timing(samples):
+    return {
+        "samples_ms": samples,
+        "p50_ms": float(samples[0]),
+        "p95_ms": float(samples[-1]),
+        "mean_ms": sum(samples) / len(samples),
+        "sum_ms": sum(samples),
+    }
+
+
 def make_question(question_id, answerable=True):
     gold = (Gold(source="jj", path="testimonials.md", must_contain="creator"),) if answerable else ()
     return Question(
@@ -50,7 +60,7 @@ def make_question(question_id, answerable=True):
     )
 
 
-def profile_result(collection, keys, question_ids, scale=1.0, latency_k=7):
+def profile_result(collection, keys, question_ids, scale=1.0, e2e_p95=2.0):
     questions = []
     for question_id in question_ids:
         answerable = question_id != "neg"
@@ -67,7 +77,15 @@ def profile_result(collection, keys, question_ids, scale=1.0, latency_k=7):
                 "gold": results_mod.gold_entry(question),
                 "notes": question.notes,
                 "by_k": by_k,
-                "latency_ms": [1.0, 2.0],
+                "timings": {"e2e_ms": e2e_p95, "search_ms": 10.0, "rerank_ms": 100.0},
+                "rerank": {
+                    "docs": 30,
+                    "results": 30,
+                    "tokens": 39,
+                    "cost": 0.000351,
+                    "cost_rub": 0.03,
+                    "status": "success",
+                },
             }
         )
     return {
@@ -75,22 +93,30 @@ def profile_result(collection, keys, question_ids, scale=1.0, latency_k=7):
         "prefix": "eval-x",
         "data_root": f"data/{collection}",
         "source_names": ["jj"],
-        "latency": {
-            "warmup": 3,
-            "reps": 2,
-            "latency_k": latency_k,
-            "samples_ms": [1.0, 2.0],
-            "p50_ms": 1.5,
-            "p95_ms": 2.0,
+        "timings": {
+            "search": timing([10.0, 20.0]),
+            "rerank": timing([100.0, 200.0]),
+            "e2e": timing([1.0, e2e_p95]),
+        },
+        "rerank": {
+            "calls": 2,
+            "documents": 60,
+            "tokens": 80,
+            "cost": 0.0007,
+            "cost_rub": 0.06,
+            "duration_ms": [100.0, 200.0],
+            "p50_ms": 100.0,
+            "p95_ms": 200.0,
+            "failures": 0,
         },
         "questions": questions,
     }
 
 
-def build(keys, latency_k=7, single_ids=("a", "b"), multi_ids=("a", "b", "neg"), multi_scale=0.0):
+def build(keys, single_ids=("a", "b"), multi_ids=("a", "b", "neg"), multi_scale=0.0):
     profiles = {
-        "single-project": profile_result("eval-single", keys, single_ids, 1.0, latency_k),
-        "multi-project": profile_result("eval-multi", keys, multi_ids, multi_scale, latency_k),
+        "single-project": profile_result("eval-single", keys, single_ids, 1.0, e2e_p95=2.0),
+        "multi-project": profile_result("eval-multi", keys, multi_ids, multi_scale, e2e_p95=4.0),
     }
     return results_mod.build_results(
         experiment="baseline",
@@ -102,7 +128,6 @@ def build(keys, latency_k=7, single_ids=("a", "b"), multi_ids=("a", "b", "neg"),
         environment={"os": "darwin"},
         profiles=profiles,
         k_values=keys,
-        latency_k=latency_k,
     )
 
 
@@ -111,7 +136,7 @@ class BuildResultsTest(unittest.TestCase):
         self.results = build(K_VALUES)
 
     def test_top_level_contract(self):
-        self.assertEqual(self.results["schema_version"], results_mod.RESULTS_SCHEMA_VERSION)
+        self.assertEqual(self.results["schema_version"], 2)
         for key in (
             "experiment",
             "run",
@@ -129,21 +154,35 @@ class BuildResultsTest(unittest.TestCase):
         self.assertEqual(self.results["k_values"], list(K_VALUES))
         self.assertEqual(self.results["commit_ref"], "origin/main")
 
-    def test_degradation_covers_shared_answerable_questions(self):
+    def test_v1_keys_are_removed(self):
+        profile = self.results["profiles"]["single-project"]
+        self.assertNotIn("latency", profile)
+        question = profile["questions"][0]
+        for key in ("latency_ms", "cold_ms"):
+            self.assertNotIn(key, question)
+
+    def test_degradation_covers_every_metric_and_k(self):
         entry = self.results["degradation"]["single-project->multi-project"]
         self.assertEqual(entry["questions_compared"], ["a", "b"])
+        for metric in ("recall", "purity", "mrr"):
+            for k in K_VALUES:
+                self.assertIn(f"{metric}@{k}", entry)
         # single recall@7 = 7/20; multi returns nothing (scale 0).
         self.assertAlmostEqual(entry["recall@7"], -0.35)
         self.assertAlmostEqual(entry["purity@7"], -0.35)
-        self.assertAlmostEqual(entry["p95_ms"], 0.0)
+        self.assertAlmostEqual(entry["mrr@20"], -1.0)
+        # e2e p95: 4.0 - 2.0.
+        self.assertAlmostEqual(entry["p95_ms"], 2.0)
 
-    def test_summary_counts_and_no_hit_rate(self):
+    def test_summary_counts_all_k_and_timings(self):
         single = self.results["summary"]["single-project"]
         self.assertEqual(single["answerable"], 2)
         self.assertEqual(single["unanswerable"], 0)
         self.assertIsNone(single["unanswerable_no_hit_rate"])
-        self.assertAlmostEqual(single["mean_recall"]["recall@7"], 0.35)
-        self.assertAlmostEqual(single["mean_purity@7"], 0.35)
+        for k in K_VALUES:
+            self.assertAlmostEqual(single["mean_recall"][f"recall@{k}"], k / 20.0)
+            self.assertAlmostEqual(single[f"mean_purity@{k}"], k / 20.0)
+            self.assertAlmostEqual(single[f"mean_mrr@{k}"], k / 20.0)
 
         multi = self.results["summary"]["multi-project"]
         self.assertEqual(multi["answerable"], 2)
@@ -151,76 +190,62 @@ class BuildResultsTest(unittest.TestCase):
         self.assertEqual(multi["unanswerable_no_hit_rate"], 1.0)
         self.assertEqual(multi["mean_recall"]["recall@7"], 0.0)
 
+    def test_summary_timing_rollup(self):
+        timings = self.results["summary"]["single-project"]["timings"]
+        self.assertEqual(timings["search"]["p50_ms"], 10.0)
+        self.assertEqual(timings["rerank"]["p95_ms"], 200.0)
+        self.assertEqual(timings["e2e"]["p95_ms"], 2.0)
+        self.assertEqual(timings["e2e"]["mean_ms"], 1.5)
+
+    def test_rerank_rollup_is_preserved(self):
+        rerank = self.results["summary"]["single-project"]["rerank"]
+        self.assertEqual(rerank["calls"], 2)
+        self.assertEqual(rerank["documents"], 60)
+
 
 class SubsetSweepTest(unittest.TestCase):
-    """Regression: a `--k 1`-style subset must not KeyError in aggregation."""
+    """Regression: a subset sweep must not KeyError in aggregation."""
 
     def test_build_results_with_single_k(self):
-        results = build((1,), latency_k=1)
-        self.assertEqual(results["k_values"], [1])
+        results = build((3,))
+        self.assertEqual(results["k_values"], [3])
 
         single = results["summary"]["single-project"]
-        self.assertEqual(list(single["mean_recall"]), ["recall@1"])
-        self.assertIn("mean_purity@1", single)
-        self.assertIn("mean_mrr@1", single)
+        self.assertEqual(list(single["mean_recall"]), ["recall@3"])
+        self.assertIn("mean_purity@3", single)
+        self.assertIn("mean_mrr@3", single)
 
         entry = results["degradation"]["single-project->multi-project"]
-        self.assertIn("recall@1", entry)
-        self.assertIn("purity@1", entry)
-        self.assertNotIn("recall@3", entry)
+        self.assertIn("recall@3", entry)
+        self.assertIn("purity@3", entry)
+        self.assertNotIn("recall@7", entry)
 
     def test_build_results_with_multi_k_subset(self):
-        results = build((1, 5, 20), latency_k=5)
-        self.assertEqual(results["k_values"], [1, 5, 20])
+        results = build((3, 20))
+        self.assertEqual(results["k_values"], [3, 20])
         self.assertEqual(
             list(results["summary"]["single-project"]["mean_recall"]),
-            ["recall@1", "recall@5", "recall@20"],
+            ["recall@3", "recall@20"],
         )
-
-
-class LatencyKTest(unittest.TestCase):
-    """Regression: aggregation must use the run's latency_k, not the default 7."""
-
-    def test_summary_reads_labels_at_latency_k(self):
-        results = build(K_VALUES, latency_k=10)
-        single = results["summary"]["single-project"]
-        self.assertIn("mean_purity@10", single)
-        self.assertNotIn("mean_purity@7", single)
-        # answered_entry(k=10) with scale 1.0 -> 10/20.
-        self.assertAlmostEqual(single["mean_purity@10"], 0.5)
-        self.assertAlmostEqual(single["mean_mrr@10"], 0.5)
-
-    def test_degradation_uses_latency_k(self):
-        entry = build(K_VALUES, latency_k=10)["degradation"]["single-project->multi-project"]
-        self.assertIn("purity@10", entry)
-        self.assertNotIn("purity@7", entry)
 
 
 class ValidateMetricKTest(unittest.TestCase):
     def test_normalizes_sorts_dedupes(self):
-        self.assertEqual(results_mod.validate_metric_k([5, 1, 3, 1], 1), (1, 3, 5))
-
-    def test_latency_k_must_be_swept(self):
-        with self.assertRaises(ValueError):
-            results_mod.validate_metric_k((1, 3, 5), 7)
+        self.assertEqual(results_mod.validate_metric_k([20, 3, 7, 3]), (3, 7, 20))
 
     def test_empty_sweep_rejected(self):
         with self.assertRaises(ValueError):
-            results_mod.validate_metric_k((), 7)
-
-    def test_build_results_rejects_latency_outside_sweep(self):
-        with self.assertRaises(ValueError):
-            build((1, 3, 5), latency_k=7)
+            results_mod.validate_metric_k(())
 
 
 class WriteResultsTest(unittest.TestCase):
     def test_writes_pretty_json_and_hits(self):
         with tempfile.TemporaryDirectory() as tmp:
             run_dir = Path(tmp) / "nested" / "run"
-            path = results_mod.write_results(run_dir, {"schema_version": 1})
+            path = results_mod.write_results(run_dir, {"schema_version": 2})
             self.assertTrue(path.is_file())
             self.assertTrue(path.read_text().endswith("\n"))
-            self.assertEqual(json.loads(path.read_text())["schema_version"], 1)
+            self.assertEqual(json.loads(path.read_text())["schema_version"], 2)
 
             hits_path = results_mod.write_hits(
                 run_dir, [{"question": "a"}, {"question": "b"}]

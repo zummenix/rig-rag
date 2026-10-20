@@ -1,15 +1,15 @@
 """The versioned `results.json` contract plus aggregation and writing.
 
-`results.json` is the render input for P4 and is committed as an artifact, so
-its shape is a tested contract: bump `RESULTS_SCHEMA_VERSION` when a consumer
-must know about a change. Fixtures per version live in `eval/report/tests`
-(P4); for now `eval/tests/test_results.py` pins the current version.
+`results.json` is the render input for the report framework and is committed as
+an artifact, so its shape is a tested contract: bump `RESULTS_SCHEMA_VERSION`
+when a consumer must know about a change. Fixtures per version live in
+`eval/report/tests`; `eval/tests/test_results.py` pins the current version.
 
-Layout (v1):
+Layout (v2):
 
 ```jsonc
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "experiment": "<id>",
   "run": "2026-10-10T12-00-00Z",     // also the run directory name
   "started_at": "2026-10-10T12:00:00Z",
@@ -17,43 +17,48 @@ Layout (v1):
   "commit_ref": "origin/main",       // best-effort pushed ref containing `commit`; "" when none
   "config": { "<profile>": { "rig-rag.toml": {...}, "sources.json": [...] } },
   "environment": { "os", "arch", "python", "binary", "binary_sha256", "qdrant_url" },
-  "k_values": [1, 3, 5, 7, 10, 20],   // the swept k set (default = contract grid)
+  "k_values": [3, 7, 20],            // reported k set (default = contract grid)
   "profiles": {
     "<profile>": {
       "collection": "...", "prefix": "...", "data_root": "...",
       "source_names": ["..."],
-      "latency": { "warmup", "reps", "latency_k", "cache_rerank",
-                   "samples_ms", "p50_ms", "p95_ms",
-                   // present when --cache-rerank produced cache misses:
-                   "cold_samples_ms", "cold_p50_ms", "cold_p95_ms" },
+      // One sample per question per phase; percentiles are across questions,
+      // not repeated trials. Samples are cold: exactly one uncached query per
+      // question at max(k).
+      "timings": {
+        "search": { "samples_ms", "p50_ms", "p95_ms", "mean_ms", "sum_ms" },
+        "rerank": { ... },              // empty when no reranker is configured
+        "e2e":    { ... }               // client-observed HTTP round trip
+      },
       "rerank": { "calls", "documents", "tokens", "cost", "cost_rub",
                   "duration_ms", "p50_ms", "p95_ms", "failures" },
       "questions": [
         { "id", "question", "answerable", "gold": [...], "notes",
-          "by_k": { "1": { per-k metrics }, ... },
-          "latency_ms": [...], "cold_ms": <float|null> }
+          "by_k": { "3": { per-k metrics }, ... },
+          "timings": { "e2e_ms", "search_ms", "rerank_ms" },
+          "rerank": { "docs", "results", "tokens", "cost", "cost_rub",
+                      "status": "success"|"failed" } | null }
       ]
     }
   },
-  "degradation": { "single-project->multi-project": { "recall@k", "purity@k", "p95_ms" } },
+  "degradation": { "single-project->multi-project": { "recall@k", "purity@k", "mrr@k", "p95_ms" } },
   "summary": { "<profile>": { aggregates } }
 }
 ```
 
-The swept `k` set is recorded in `k_values` and defaults to the contract grid
-(`metrics.K_VALUES`), but a run may sweep a subset (e.g. `--k 1,3,5`). Every
-`k` used for a metric label (`recall@k`, `purity@k`, the unanswerable no-hit
-rate) comes from that recorded set, and `latency_k` — recorded per profile in
-`latency.latency_k` — must be one of the swept values.
-
-When `--cache-rerank` is used, `latency.samples_ms` are warm cache hits and
-`cold_*` samples come from the first k-sweep query per question (the only
-provider call). Without it, every recorded sample is an uncached call.
+The reported `k` set is recorded in `k_values` and defaults to the contract grid
+(`metrics.K_VALUES`), but a run may report a subset. Every k used for a metric
+label (`recall@k`, `purity@k`, `mrr@k`, the unanswerable no-hit rate) comes from
+that recorded set. Metrics at smaller k are exact prefixes of the single
+`max(k)` query, because the reranker's candidate pool covers `max(k)`.
 
 `commit`/`commit_ref` are best-effort breadcrumbs. The runner does not require a
 clean or pushed work tree (jj working-copy commits, detached `HEAD`s, and dirty
 trees are all measurable), so the record's `## Reproduction` — not `results.json`
 — carries the human-facing provenance.
+
+v1 files (warmup/reps/latency_k, cache-aware latency samples) are not comparable
+with v2 and are refused by the report loader.
 """
 
 from __future__ import annotations
@@ -65,7 +70,9 @@ from pathlib import Path
 from eval.questions import MULTI_PROFILE, SINGLE_PROFILE, Question
 from eval.runner.metrics import delta, mean
 
-RESULTS_SCHEMA_VERSION = 1
+RESULTS_SCHEMA_VERSION = 2
+
+_TIMING_PHASES = ("search", "rerank", "e2e")
 
 
 def utc_run_id() -> str:
@@ -96,20 +103,12 @@ def gold_entry(question: Question) -> list[dict]:
     return entries
 
 
-def validate_metric_k(k_values, latency_k: int) -> tuple[int, ...]:
-    """Normalizes the swept k set and checks `latency_k` is part of it.
-
-    Shared by the CLI and `build_results` so a programmatic caller cannot
-    produce an artifact whose aggregation reads a k that was never swept.
-    """
+def validate_metric_k(k_values) -> tuple[int, ...]:
+    """Normalizes the reported k set; shared by the CLI and `build_results`."""
 
     values = tuple(sorted({int(k) for k in k_values}))
     if not values:
         raise ValueError("at least one k value is required")
-    if int(latency_k) not in values:
-        raise ValueError(
-            f"latency_k {latency_k} must be one of the swept k values {list(values)}"
-        )
     return values
 
 
@@ -124,9 +123,8 @@ def build_results(
     environment: dict,
     profiles: dict,
     k_values,
-    latency_k: int,
 ) -> dict:
-    values = validate_metric_k(k_values, latency_k)
+    values = validate_metric_k(k_values)
     return {
         "schema_version": RESULTS_SCHEMA_VERSION,
         "experiment": experiment,
@@ -138,8 +136,8 @@ def build_results(
         "environment": environment,
         "k_values": list(values),
         "profiles": profiles,
-        "degradation": degradation(profiles, values, int(latency_k)),
-        "summary": summarize(profiles, values, int(latency_k)),
+        "degradation": degradation(profiles, values),
+        "summary": summarize(profiles, values),
     }
 
 
@@ -147,7 +145,16 @@ def _question_index(profile_result: dict) -> dict[str, dict]:
     return {question["id"]: question for question in profile_result["questions"]}
 
 
-def summarize(profiles: dict, k_values: tuple[int, ...], latency_k: int) -> dict:
+def _timing_rollup(timing: dict | None) -> dict:
+    timing = timing or {}
+    return {
+        "p50_ms": timing.get("p50_ms"),
+        "p95_ms": timing.get("p95_ms"),
+        "mean_ms": timing.get("mean_ms"),
+    }
+
+
+def summarize(profiles: dict, k_values: tuple[int, ...]) -> dict:
     """Per-profile aggregates over the applicable questions."""
 
     summary: dict = {}
@@ -157,19 +164,24 @@ def summarize(profiles: dict, k_values: tuple[int, ...], latency_k: int) -> dict
         answered = [q for q in applied if q["answerable"]]
         unanswerable = [q for q in applied if not q["answerable"]]
 
-        mean_recall = {}
-        for k in k_values:
-            key = str(k)
-            mean_recall[f"recall@{k}"] = mean(
-                by_id[q["id"]]["by_k"][key]["recall"] for q in answered
+        mean_recall = {
+            f"recall@{k}": mean(
+                by_id[q["id"]]["by_k"][str(k)]["recall"] for q in answered
             )
-
-        mean_purity = mean(
-            by_id[q["id"]]["by_k"][str(latency_k)]["purity"] for q in answered
-        )
-        mean_mrr = mean(
-            by_id[q["id"]]["by_k"][str(latency_k)]["mrr"] for q in answered
-        )
+            for k in k_values
+        }
+        mean_purity = {
+            f"mean_purity@{k}": mean(
+                by_id[q["id"]]["by_k"][str(k)]["purity"] for q in answered
+            )
+            for k in k_values
+        }
+        mean_mrr = {
+            f"mean_mrr@{k}": mean(
+                by_id[q["id"]]["by_k"][str(k)]["mrr"] for q in answered
+            )
+            for k in k_values
+        }
 
         no_hit_values = [
             by_id[q["id"]]["by_k"][str(k)]["no_hit"]
@@ -177,30 +189,26 @@ def summarize(profiles: dict, k_values: tuple[int, ...], latency_k: int) -> dict
             for k in k_values
         ]
 
-        latency = {
-            "cache_rerank": profile["latency"].get("cache_rerank", False),
-            "p50_ms": profile["latency"]["p50_ms"],
-            "p95_ms": profile["latency"]["p95_ms"],
+        timings = {
+            phase: _timing_rollup((profile.get("timings") or {}).get(phase))
+            for phase in _TIMING_PHASES
         }
-        for key in ("cold_p50_ms", "cold_p95_ms"):
-            if key in profile["latency"]:
-                latency[key] = profile["latency"][key]
 
         summary[name] = {
             "questions_applied": len(applied),
             "answerable": len(answered),
             "unanswerable": len(unanswerable),
             "mean_recall": mean_recall,
-            f"mean_purity@{latency_k}": mean_purity,
-            f"mean_mrr@{latency_k}": mean_mrr,
+            **mean_purity,
+            **mean_mrr,
             "unanswerable_no_hit_rate": mean(no_hit_values),
-            "latency": latency,
+            "timings": timings,
             "rerank": profile.get("rerank"),
         }
     return summary
 
 
-def degradation(profiles: dict, k_values: tuple[int, ...], latency_k: int) -> dict:
+def degradation(profiles: dict, k_values: tuple[int, ...]) -> dict:
     """Single -> multi deltas over the questions both profiles share."""
 
     if SINGLE_PROFILE not in profiles or MULTI_PROFILE not in profiles:
@@ -217,20 +225,22 @@ def degradation(profiles: dict, k_values: tuple[int, ...], latency_k: int) -> di
         "to": MULTI_PROFILE,
         "questions_compared": shared,
     }
-    for k in k_values:
-        key = str(k)
-        single_recall = mean(single[qid]["by_k"][key]["recall"] for qid in shared)
-        multi_recall = mean(multi[qid]["by_k"][key]["recall"] for qid in shared)
-        entry[f"recall@{k}"] = delta(multi_recall, single_recall)
+    for metric, extract in (
+        ("recall", lambda by_k: by_k["recall"]),
+        ("purity", lambda by_k: by_k["purity"]),
+        ("mrr", lambda by_k: by_k["mrr"]),
+    ):
+        for k in k_values:
+            key = str(k)
+            single_values = mean(
+                extract(single[qid]["by_k"][key]) for qid in shared
+            )
+            multi_values = mean(extract(multi[qid]["by_k"][key]) for qid in shared)
+            entry[f"{metric}@{k}"] = delta(multi_values, single_values)
 
-    single_purity = mean(single[qid]["by_k"][str(latency_k)]["purity"] for qid in shared)
-    multi_purity = mean(multi[qid]["by_k"][str(latency_k)]["purity"] for qid in shared)
-    entry[f"purity@{latency_k}"] = delta(multi_purity, single_purity)
-
-    entry["p95_ms"] = delta(
-        profiles[MULTI_PROFILE]["latency"]["p95_ms"],
-        profiles[SINGLE_PROFILE]["latency"]["p95_ms"],
-    )
+    single_timing = (profiles[SINGLE_PROFILE].get("timings") or {}).get("e2e") or {}
+    multi_timing = (profiles[MULTI_PROFILE].get("timings") or {}).get("e2e") or {}
+    entry["p95_ms"] = delta(multi_timing.get("p95_ms"), single_timing.get("p95_ms"))
 
     return {f"{SINGLE_PROFILE}->{MULTI_PROFILE}": entry}
 

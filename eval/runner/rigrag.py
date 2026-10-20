@@ -72,10 +72,14 @@ class RigRag:
     def promote(self, config: Path, collection: str) -> None:
         self._run("--config", self._cli_path(config), "promote", collection)
 
-    def serve_command(
-        self, config: Path, bind: str, site_dir: Path, cache_rerank: bool = False
-    ) -> list[str]:
-        command = self._command(
+    def serve_command(self, config: Path, bind: str, site_dir: Path) -> list[str]:
+        """The serve command; eval metrics are always logged.
+
+        The runner has no toggle: every measured run needs the per-question
+        `search`/`rerank` lines to split timings and rerank cost.
+        """
+
+        return self._command(
             "--config",
             self._cli_path(config),
             "serve",
@@ -83,10 +87,8 @@ class RigRag:
             bind,
             "--site-dir",
             self._cli_path(site_dir),
+            "--log-eval-metrics",
         )
-        if cache_rerank:
-            command.append("--cache-rerank")
-        return command
 
     def model(self, config: Path) -> str:
         result = self._run_capture("--config", self._cli_path(config), "model")

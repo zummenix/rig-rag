@@ -60,15 +60,15 @@ class RigRagCommandTest(unittest.TestCase):
                 "127.0.0.1:9",
                 "--site-dir",
                 "no-site",
+                "--log-eval-metrics",
             ],
         )
 
-    def test_serve_command_appends_cache_flag(self):
+    def test_serve_command_always_logs_eval_metrics(self):
         rig = RigRag(Path("/bin/rig-rag"), Path("."))
-        command = rig.serve_command(
-            Path("cfg.toml"), "127.0.0.1:9", Path("no-site"), cache_rerank=True
-        )
-        self.assertEqual(command[-1], "--cache-rerank")
+        command = rig.serve_command(Path("cfg.toml"), "127.0.0.1:9", Path("no-site"))
+        self.assertIn("--log-eval-metrics", command)
+        self.assertNotIn("--cache-rerank", command)
 
     def test_cli_path_relativizes_paths_under_cwd(self):
         rig = RigRag(Path("/bin/rig-rag"), Path("/repo"))
@@ -89,6 +89,7 @@ class RigRagCommandTest(unittest.TestCase):
                 "127.0.0.1:9",
                 "--site-dir",
                 "site",
+                "--log-eval-metrics",
             ],
         )
 
