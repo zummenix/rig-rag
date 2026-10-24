@@ -6,7 +6,7 @@ use std::time::Duration;
 use anyhow::Result;
 use futures::{Stream, future::BoxFuture};
 
-use shared::{ChatEvent, DocHit, Msg};
+use shared::{ChatEvent, DocHit, Msg, SearchMode};
 
 /// Boxed stream of chat events for a single stateless turn.
 pub type ChatStream = Pin<Box<dyn Stream<Item = Result<ChatEvent>> + Send + 'static>>;
@@ -28,12 +28,13 @@ pub struct AppState {
 /// Dyn-compatible so the router can hold an `Arc<dyn Retriever>`; production
 /// wraps Qdrant, tests inject a mock.
 pub trait Retriever: Send + Sync {
-    /// Returns the `k` most similar chunks at or above `threshold`, best first.
+    /// Returns the `k` most similar chunks, best first, searching the vectors
+    /// selected by `mode`. Each mode applies its own internal score floor.
     fn retrieve<'a>(
         &'a self,
         question: &'a str,
         k: u64,
-        threshold: f32,
+        mode: SearchMode,
     ) -> BoxFuture<'a, Result<Vec<DocHit>>>;
 }
 

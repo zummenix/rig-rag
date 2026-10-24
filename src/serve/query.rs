@@ -5,16 +5,16 @@ use axum::{
 };
 use shared::QueryRequest;
 
-use crate::retrieval::RRF_FLOOR;
 use crate::serve::{internal_error, state::AppState};
 
-/// `POST /api/query` — clamp `k`, retrieve, return hits (possibly empty).
+/// `POST /api/query` — clamp `k`, retrieve in the requested mode (hybrid by
+/// default), return hits (possibly empty).
 pub async fn handler(State(state): State<AppState>, Json(request): Json<QueryRequest>) -> Response {
     let k = request.effective_k();
 
     match state
         .retriever
-        .retrieve(&request.question, k, RRF_FLOOR)
+        .retrieve(&request.question, k, request.effective_mode())
         .await
     {
         Ok(hits) => Json(hits).into_response(),

@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use anyhow::{Result, anyhow};
 use futures::{StreamExt, future::BoxFuture};
-use shared::{ChatEvent, DocHit, Msg};
+use shared::{ChatEvent, DocHit, Msg, SearchMode};
 
 use crate::serve::state::{ChatStream, Completer, Retriever};
 
@@ -54,7 +54,7 @@ pub fn mock_docs() -> Vec<DocHit> {
     ]
 }
 
-/// Returns canned hits, ignoring the question; applies `threshold` then `k`.
+/// Returns the first `k` canned hits, ignoring the question and mode.
 #[derive(Default, Clone, Copy)]
 pub struct MockRetriever;
 
@@ -69,16 +69,9 @@ impl Retriever for MockRetriever {
         &'a self,
         _question: &'a str,
         k: u64,
-        threshold: f32,
+        _mode: SearchMode,
     ) -> BoxFuture<'a, Result<Vec<DocHit>>> {
-        Box::pin(async move {
-            let hits = mock_docs()
-                .into_iter()
-                .filter(|doc| doc.score >= f64::from(threshold))
-                .take(k as usize)
-                .collect();
-            Ok(hits)
-        })
+        Box::pin(async move { Ok(mock_docs().into_iter().take(k as usize).collect()) })
     }
 }
 
@@ -180,19 +173,25 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    async fn retriever_honours_threshold_and_k() {
+    async fn retriever_returns_the_first_k_hits() {
         let retriever = MockRetriever::new();
-        let hits = retriever.retrieve("q", 2, 0.5).await.unwrap();
+        let hits = retriever
+            .retrieve("q", 2, SearchMode::default())
+            .await
+            .unwrap();
         assert_eq!(hits.len(), 2);
         assert_eq!(hits[0].path, "docs/auth.md");
         assert_eq!(hits[1].start_line, 20);
     }
 
     #[tokio::test]
-    async fn retriever_threshold_filters_everything() {
+    async fn retriever_returns_all_hits_when_k_exceeds_them() {
         let retriever = MockRetriever::new();
-        let hits = retriever.retrieve("q", 10, 0.99).await.unwrap();
-        assert!(hits.is_empty());
+        let hits = retriever
+            .retrieve("q", 10, SearchMode::default())
+            .await
+            .unwrap();
+        assert_eq!(hits, mock_docs());
     }
 
     #[tokio::test]
