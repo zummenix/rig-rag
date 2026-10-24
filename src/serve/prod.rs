@@ -10,7 +10,7 @@ use crate::config::Config;
 use crate::retrieval;
 use crate::serve::chat::PREAMBLE;
 use crate::serve::state::{ChatStream, Completer, Retriever};
-use crate::store::Store;
+use crate::store::{SearchMode, Store};
 use shared::{ChatEvent, DocHit, Msg, Role};
 
 /// [`Retriever`] backed by the active Qdrant collection.
@@ -32,9 +32,9 @@ impl Retriever for QdrantRetriever {
         &'a self,
         question: &'a str,
         k: u64,
-        threshold: f32,
+        mode: SearchMode,
     ) -> BoxFuture<'a, Result<Vec<DocHit>>> {
-        Box::pin(retrieval::search(&self.store, question, k, threshold))
+        Box::pin(retrieval::search(&self.store, question, k, mode))
     }
 }
 

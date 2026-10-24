@@ -8,20 +8,47 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use eventsource_stream::Eventsource;
-use futures::StreamExt;
+use futures::{StreamExt, future::BoxFuture};
 use reqwest::StatusCode;
 use rig_rag::serve::{
     self,
-    mock::{MockCompleter, MockRetriever, mock_answer},
-    state::AppState,
+    mock::{MockCompleter, MockRetriever, mock_answer, mock_docs},
+    state::{AppState, Retriever},
 };
-use shared::{ChatEvent, ChatRequest, DocHit, Msg, QueryRequest, Role};
+use shared::{ChatEvent, ChatRequest, DocHit, Msg, QueryRequest, Role, SearchMode};
 use tokio::net::TcpListener;
 
-/// Builds state with the mock retriever and the given completer.
-fn state(completer: MockCompleter) -> AppState {
+/// A [`Retriever`] that serves the mock hits and records the `mode` of every
+/// call, so tests can assert the request body reached retrieval unchanged.
+#[derive(Clone, Default)]
+struct RecordingRetriever {
+    modes: Arc<std::sync::Mutex<Vec<SearchMode>>>,
+}
+
+impl RecordingRetriever {
+    /// The modes captured so far, in call order.
+    fn modes(&self) -> Vec<SearchMode> {
+        self.modes.lock().unwrap().clone()
+    }
+}
+
+impl Retriever for RecordingRetriever {
+    fn retrieve<'a>(
+        &'a self,
+        _question: &'a str,
+        k: u64,
+        mode: SearchMode,
+    ) -> BoxFuture<'a, anyhow::Result<Vec<DocHit>>> {
+        self.modes.lock().unwrap().push(mode);
+        // Same hit selection as `MockRetriever`: take the first `k`.
+        Box::pin(async move { Ok(mock_docs().into_iter().take(k as usize).collect()) })
+    }
+}
+
+/// Builds state around a retriever and the given completer.
+fn state(retriever: Arc<dyn Retriever>, completer: MockCompleter) -> AppState {
     AppState {
-        retriever: Arc::new(MockRetriever::new()),
+        retriever,
         completer: Arc::new(completer),
         // A directory that does not exist, so the router has no static fallback.
         site_dir: PathBuf::from("./rig-rag-no-such-site-dir"),
@@ -31,7 +58,12 @@ fn state(completer: MockCompleter) -> AppState {
 
 /// Binds the router on an ephemeral port and returns its base URL.
 async fn spawn(completer: MockCompleter) -> String {
-    let app = serve::router(state(completer));
+    spawn_with(Arc::new(MockRetriever::new()), completer).await
+}
+
+/// Binds the router around a specific retriever, returning its base URL.
+async fn spawn_with(retriever: Arc<dyn Retriever>, completer: MockCompleter) -> String {
+    let app = serve::router(state(retriever, completer));
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     tokio::spawn(async move {
@@ -83,6 +115,7 @@ async fn query_returns_canned_hits() {
         .json(&QueryRequest {
             question: "how do tokens work?".into(),
             k: Some(2),
+            mode: None,
         })
         .send()
         .await
@@ -104,6 +137,7 @@ async fn query_more_than_available_returns_all() {
         .json(&QueryRequest {
             question: "q".into(),
             k: Some(20),
+            mode: None,
         })
         .send()
         .await
@@ -122,6 +156,7 @@ async fn query_clamps_out_of_range_k() {
             .json(&QueryRequest {
                 question: "q".into(),
                 k: Some(k),
+                mode: None,
             })
             .send()
             .await
@@ -146,6 +181,46 @@ async fn query_rejects_malformed_body() {
         .await
         .unwrap();
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn query_defaults_to_hybrid_and_forwards_the_requested_mode() {
+    let retriever = RecordingRetriever::default();
+    let url = spawn_with(Arc::new(retriever.clone()), MockCompleter::new()).await;
+    let client = reqwest::Client::new();
+
+    for mode in [None, Some(SearchMode::Dense), Some(SearchMode::Sparse)] {
+        let response = client
+            .post(format!("{url}/api/query"))
+            .json(&QueryRequest {
+                question: "q".into(),
+                k: Some(1),
+                mode,
+            })
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK, "mode={mode:?}");
+    }
+
+    assert_eq!(
+        retriever.modes(),
+        [SearchMode::Hybrid, SearchMode::Dense, SearchMode::Sparse]
+    );
+}
+
+#[tokio::test]
+async fn query_rejects_an_unknown_mode() {
+    let url = spawn(MockCompleter::new()).await;
+    let response = reqwest::Client::new()
+        .post(format!("{url}/api/query"))
+        .header("content-type", "application/json")
+        .body(r#"{"question":"q","mode":"fuzzy"}"#)
+        .send()
+        .await
+        .unwrap();
+    // Well-formed JSON that fails to deserialize is a 422, not a 400.
+    assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
 }
 
 #[tokio::test]
@@ -211,6 +286,24 @@ async fn chat_rejects_malformed_body() {
         .await
         .unwrap();
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn chat_always_retrieves_with_hybrid() {
+    let retriever = RecordingRetriever::default();
+    let url = spawn_with(Arc::new(retriever.clone()), MockCompleter::new()).await;
+
+    let events = read_chat_events(
+        &url,
+        &ChatRequest {
+            history: Vec::new(),
+            prompt: "hello".into(),
+        },
+    )
+    .await;
+    assert_eq!(events.first().map(|(name, _)| name.as_str()), Some("docs"));
+
+    assert_eq!(retriever.modes(), [SearchMode::Hybrid]);
 }
 
 #[tokio::test]

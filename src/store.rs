@@ -22,6 +22,9 @@ use crate::reranker::{Ranked, Reranker};
 
 use tokio::sync::{mpsc, oneshot};
 
+/// Re-exported from the wire crate: request bodies select it as `"mode"`.
+pub use shared::SearchMode;
+
 const EMBEDDING_WORKER_QUEUE_SIZE: usize = 4;
 
 /// Named vectors of the hybrid collection: the dense BGE embedding plus a
@@ -38,6 +41,26 @@ const HYBRID_PREFETCH_LIMIT: u64 = 50;
 const RRF_K: u32 = 2;
 const SPARSE_WEIGHT: f32 = 2.0;
 const DENSE_WEIGHT: f32 = 1.0;
+
+/// Per-mode score floors, each on that mode's own scale.
+///
+/// Hybrid's RRF score is rank-based, so `0.0` disables its floor. Dense cosine
+/// similarities on this corpus stay above `0.5` even for unrelated questions,
+/// and sparse BM25 is unbounded and query-dependent; both stay at `0.0` until
+/// an eval run calibrates a real cutoff.
+const HYBRID_THRESHOLD: f32 = 0.0;
+const DENSE_THRESHOLD: f32 = 0.0;
+const SPARSE_THRESHOLD: f32 = 0.0;
+
+/// Score floor for a search mode, keeping the threshold tied to the mode that
+/// produced the score.
+fn threshold(mode: SearchMode) -> f32 {
+    match mode {
+        SearchMode::Hybrid => HYBRID_THRESHOLD,
+        SearchMode::Dense => DENSE_THRESHOLD,
+        SearchMode::Sparse => SPARSE_THRESHOLD,
+    }
+}
 
 pub fn client(url: &str) -> Result<Qdrant> {
     Qdrant::from_url(url)
@@ -185,58 +208,71 @@ impl Store {
             .map(|_| ())
     }
 
-    /// Returns the `k` chunks most relevant to `question`, best first, by
-    /// fusing a BM25 sparse prefetch and a dense prefetch with Reciprocal Rank
-    /// Fusion; drops any fused hit whose RRF score is below `threshold`.
+    /// Returns the `k` chunks most relevant to `question`, best first, using
+    /// the vectors selected by `mode`; drops any hit below that mode's score
+    /// floor.
     ///
-    /// With a reranker configured, up to `max(k, [reranker].candidates)` fused
-    /// hits are scored first and the result is cut to `k`. A reranker failure
-    /// falls back to the fused order after logging the error.
+    /// [`SearchMode::Hybrid`] (the default) fuses a BM25 sparse prefetch and a
+    /// dense prefetch with Reciprocal Rank Fusion; [`SearchMode::Dense`] and
+    /// [`SearchMode::Sparse`] query one vector directly. Scores are not
+    /// comparable across modes: a cosine similarity for [`SearchMode::Dense`],
+    /// a BM25 score for [`SearchMode::Sparse`], and an RRF score for
+    /// [`SearchMode::Hybrid`].
+    ///
+    /// With a reranker configured, up to `max(k, [reranker].candidates)` hits
+    /// are scored first and the result is cut to `k`. A reranker failure falls
+    /// back to the retrieved order after logging the error.
     pub async fn search(
         &self,
         question: &str,
         k: u64,
-        threshold: f32,
+        mode: SearchMode,
     ) -> Result<Vec<(DocChunk, f32)>> {
         let started = Instant::now();
-        let query_vector = self
-            .embed_texts(vec![question.to_owned()])
-            .await?
-            .into_iter()
-            .next()
-            .context("embedding model returned no vector for the query")?;
-
-        let sparse = PrefetchQueryBuilder::default()
-            .using(SPARSE_VECTOR_NAME)
-            .query(Query::new_nearest(
-                DocumentBuilder::new(question, SPARSE_MODEL_NAME).build(),
-            ))
-            .limit(HYBRID_PREFETCH_LIMIT);
-        let dense = PrefetchQueryBuilder::default()
-            .using(DENSE_VECTOR_NAME)
-            .query(Query::new_nearest(query_vector))
-            .limit(HYBRID_PREFETCH_LIMIT);
-
         let limit = match &self.reranker {
             Some(reranker) => reranker.candidates().max(k),
             None => k,
         };
 
-        let response = self
-            .client
-            .query(
-                QueryPointsBuilder::new(&self.collection)
-                    .with_payload(true)
-                    .add_prefetch(sparse)
-                    .add_prefetch(dense)
+        let sparse_query =
+            || Query::new_nearest(DocumentBuilder::new(question, SPARSE_MODEL_NAME).build());
+        let request = QueryPointsBuilder::new(&self.collection)
+            .with_payload(true)
+            .score_threshold(threshold(mode))
+            .limit(limit);
+
+        let request = match mode {
+            SearchMode::Hybrid => {
+                let dense = self.embed_question(question).await?;
+                let sparse_prefetch = PrefetchQueryBuilder::default()
+                    .using(SPARSE_VECTOR_NAME)
+                    .query(sparse_query())
+                    .limit(HYBRID_PREFETCH_LIMIT);
+                let dense_prefetch = PrefetchQueryBuilder::default()
+                    .using(DENSE_VECTOR_NAME)
+                    .query(Query::new_nearest(dense))
+                    .limit(HYBRID_PREFETCH_LIMIT);
+                request
+                    .add_prefetch(sparse_prefetch)
+                    .add_prefetch(dense_prefetch)
                     .query(Query::new_rrf(Rrf {
                         k: Some(RRF_K),
                         weights: vec![SPARSE_WEIGHT, DENSE_WEIGHT],
                     }))
-                    .score_threshold(threshold)
-                    .limit(limit)
-                    .build(),
-            )
+            }
+            SearchMode::Dense => {
+                let dense = self.embed_question(question).await?;
+                request
+                    .using(DENSE_VECTOR_NAME)
+                    .query(Query::new_nearest(dense))
+            }
+            SearchMode::Sparse => request.using(SPARSE_VECTOR_NAME).query(sparse_query()),
+        }
+        .build();
+
+        let response = self
+            .client
+            .query(request)
             .await
             .with_context(|| format!("failed to query collection {:?}", self.collection))?;
 
@@ -272,11 +308,20 @@ impl Store {
             .context("embedding worker has shut down")?;
         reply_rx.await?
     }
+
+    async fn embed_question(&self, question: &str) -> Result<Vec<f32>> {
+        self.embed_texts(vec![question.to_owned()])
+            .await?
+            .into_iter()
+            .next()
+            .context("embedding model returned no vector for the query")
+    }
 }
 
-/// Applies a reranker's best-first ordering to fused `hits`, taking at most
-/// `k`. Candidates the reranker omitted are appended in fused order with their
-/// fused scores, so the caller still receives `k` hits when the pool has them.
+/// Applies a reranker's best-first ordering to retrieved `hits`, taking at most
+/// `k`. Candidates the reranker omitted are appended in retrieval order with
+/// their retrieval scores, so the caller still receives `k` hits when the pool
+/// has them.
 fn select_reranked(hits: Vec<(DocChunk, f32)>, ranked: &[Ranked], k: u64) -> Vec<(DocChunk, f32)> {
     let limit = k as usize;
     let mut slots: Vec<Option<(DocChunk, f32)>> = hits.into_iter().map(Some).collect();
@@ -334,6 +379,11 @@ fn embedding_worker(mut model: TextEmbedding, mut rx: mpsc::Receiver<EmbedReques
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn hybrid_is_the_default_mode() {
+        assert_eq!(SearchMode::default(), SearchMode::Hybrid);
+    }
 
     fn hit(text: &str, score: f32) -> (DocChunk, f32) {
         (

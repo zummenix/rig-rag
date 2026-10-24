@@ -318,9 +318,10 @@ keeping:
   embedding-cost math.
 - **No calibrated no-hit guard.** The dense-only `THRESHOLD = 0.5` was poorly
   calibrated (most off-topic questions cleared it), and the adopted hybrid path
-  sets `RRF_FLOOR = 0.0`, so every query returns `k` hits and `no_hit` is 0 by
-  construction. `unanswerable-made-up-entity` exists to certify a future
-  score-based guard; until then its top RRF score is not a relevance signal.
+  uses a `0.0` RRF floor; dense and sparse floors are also `0.0`, so every query
+  returns `k` hits and `no_hit` is 0 by construction.
+  `unanswerable-made-up-entity` exists to certify a future score-based guard;
+  until then its top RRF score is not a relevance signal.
 - **Profile drift.** Pinned SHAs freeze the corpora; refreshing a pin is itself a
   decision (and possibly an experiment).
 - **Latency noise.** Host/Qdrant warmth and provider load affect p95; every

@@ -14,6 +14,22 @@ pub const MIN_K: u64 = 1;
 /// Inclusive upper bound for the `k` retrieval parameter.
 pub const MAX_K: u64 = 20;
 
+/// Which vectors a search consults, sent as `"mode"` in request bodies.
+///
+/// Serialized in lowercase (`"hybrid"`, `"dense"`, `"sparse"`); an omitted
+/// `mode` means [`SearchMode::default`].
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum SearchMode {
+    /// Dense and sparse vectors fused with weighted RRF (the default).
+    #[default]
+    Hybrid,
+    /// The dense embedding vector only: a semantic similarity search.
+    Dense,
+    /// The BM25 sparse vector only: a keyword search.
+    Sparse,
+}
+
 /// One retrieved document chunk, as seen by the model and the UI.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct DocHit {
@@ -64,6 +80,9 @@ pub struct QueryRequest {
     /// Number of hits to retrieve; defaults to [`DEFAULT_K`].
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub k: Option<i64>,
+    /// Vectors to search; defaults to [`SearchMode::Hybrid`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mode: Option<SearchMode>,
 }
 
 impl QueryRequest {
@@ -72,6 +91,11 @@ impl QueryRequest {
         self.k
             .unwrap_or(DEFAULT_K as i64)
             .clamp(MIN_K as i64, MAX_K as i64) as u64
+    }
+
+    /// The effective search mode, defaulting to [`SearchMode::Hybrid`].
+    pub fn effective_mode(&self) -> SearchMode {
+        self.mode.unwrap_or_default()
     }
 }
 
@@ -245,6 +269,7 @@ mod tests {
         let req = |k: Option<i64>| QueryRequest {
             question: "q".into(),
             k,
+            mode: None,
         };
         assert_eq!(req(None).effective_k(), DEFAULT_K);
         assert_eq!(req(Some(MIN_K as i64)).effective_k(), MIN_K);
@@ -255,15 +280,46 @@ mod tests {
     }
 
     #[test]
-    fn query_request_round_trip_omits_missing_k() {
+    fn query_request_round_trip_omits_missing_k_and_mode() {
         let json = serde_json::to_string(&QueryRequest {
             question: "q".into(),
             k: None,
+            mode: None,
         })
         .unwrap();
         assert_eq!(json, r#"{"question":"q"}"#);
         let decoded: QueryRequest = serde_json::from_str(r#"{"question":"q"}"#).unwrap();
         assert_eq!(decoded.k, None);
+        assert_eq!(decoded.mode, None);
+        assert_eq!(decoded.effective_mode(), SearchMode::Hybrid);
+    }
+
+    #[test]
+    fn query_request_encodes_and_decodes_each_mode() {
+        for (mode, wire) in [
+            (SearchMode::Hybrid, "hybrid"),
+            (SearchMode::Dense, "dense"),
+            (SearchMode::Sparse, "sparse"),
+        ] {
+            let json = serde_json::to_string(&QueryRequest {
+                question: "q".into(),
+                k: None,
+                mode: Some(mode),
+            })
+            .unwrap();
+            assert_eq!(json, format!(r#"{{"question":"q","mode":"{wire}"}}"#));
+
+            let decoded: QueryRequest =
+                serde_json::from_str(&format!(r#"{{"question":"q","mode":"{wire}"}}"#)).unwrap();
+            assert_eq!(decoded.mode, Some(mode));
+            assert_eq!(decoded.effective_mode(), mode);
+        }
+    }
+
+    #[test]
+    fn query_request_rejects_an_unknown_mode() {
+        let decoded = serde_json::from_str::<QueryRequest>(r#"{"question":"q","mode":"fuzzy"}"#);
+        assert!(decoded.is_err());
     }
 
     #[test]

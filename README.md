@@ -141,10 +141,15 @@ cargo run -- serve
 # -> rig-rag serving on http://127.0.0.1:8080 (site: ./site/dist)
 ```
 
-API: `GET /api/health`, `POST /api/query` (`{"question", "k"?}`), and
+API: `GET /api/health`, `POST /api/query` (`{"question", "k"?, "mode"?}`), and
 `POST /api/chat` (SSE). Chat is stateless per turn — the client sends the whole
 transcript as `{"history": [...], "prompt": "..."}` and the server retrieves on
-the latest user message.
+the latest user message (always with hybrid search).
+
+For `POST /api/query`, `mode` picks which vectors to search and defaults to
+`hybrid`: `"dense"` (embedding similarity only), `"sparse"` (BM25 keyword search
+only, skipping the local embedding), or `"hybrid"` (both, fused with RRF). An
+unknown value is rejected with `422`.
 
 ## Web UI tests
 

@@ -5,7 +5,7 @@
 
 use eventsource_stream::Eventsource;
 use futures::stream::{LocalBoxStream, StreamExt};
-use shared::{ChatEvent, ChatRequest, DocHit, Msg, QueryRequest};
+use shared::{ChatEvent, ChatRequest, DocHit, Msg, QueryRequest, SearchMode};
 
 /// A boxed, `!Send` stream of decoded chat events (one per SSE frame).
 pub type ChatStream = LocalBoxStream<'static, Result<ChatEvent, String>>;
@@ -23,13 +23,19 @@ fn endpoint(path: &str) -> String {
     format!("{origin}{path}")
 }
 
-/// `POST /api/query` — retrieve the `k` closest chunks.
-pub async fn query(question: String, k: i64) -> Result<Vec<DocHit>, String> {
+/// `POST /api/query` — retrieve the `k` closest chunks, in `mode` when given
+/// (the server defaults to hybrid search).
+pub async fn query(
+    question: String,
+    k: i64,
+    mode: Option<SearchMode>,
+) -> Result<Vec<DocHit>, String> {
     let response = reqwest::Client::new()
         .post(endpoint("/api/query"))
         .json(&QueryRequest {
             question,
             k: Some(k),
+            mode,
         })
         .send()
         .await
