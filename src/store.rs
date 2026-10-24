@@ -19,11 +19,9 @@ use crate::embedding;
 use crate::eval_metrics;
 use crate::hashing;
 use crate::reranker::{Ranked, Reranker};
+use shared::SearchMode;
 
 use tokio::sync::{mpsc, oneshot};
-
-/// Re-exported from the wire crate: request bodies select it as `"mode"`.
-pub use shared::SearchMode;
 
 const EMBEDDING_WORKER_QUEUE_SIZE: usize = 4;
 
@@ -42,24 +40,58 @@ const RRF_K: u32 = 2;
 const SPARSE_WEIGHT: f32 = 2.0;
 const DENSE_WEIGHT: f32 = 1.0;
 
-/// Per-mode score floors, each on that mode's own scale.
+/// Builds the Qdrant request for `mode`, embedding `question` through `embed`
+/// only for modes that search the dense vector.
 ///
-/// Hybrid's RRF score is rank-based, so `0.0` disables its floor. Dense cosine
-/// similarities on this corpus stay above `0.5` even for unrelated questions,
-/// and sparse BM25 is unbounded and query-dependent; both stay at `0.0` until
-/// an eval run calibrates a real cutoff.
-const HYBRID_THRESHOLD: f32 = 0.0;
-const DENSE_THRESHOLD: f32 = 0.0;
-const SPARSE_THRESHOLD: f32 = 0.0;
+/// Keeping the embedding behind a function argument means `mode` decides both
+/// whether to embed and which vectors to query in one place, while tests can
+/// supply a canned vector instead of loading the model.
+///
+/// No score threshold is applied. Qdrant treats `score_threshold` as an active
+/// filter (it drops anything worse than the value), so `0.0` is not a disabled
+/// sentinel: it would discard negative cosine similarities in dense mode.
+/// A future calibrated cutoff must only be set when it is `Some`, and separately
+/// per mode because RRF, cosine, and BM25 scores live on different scales.
+async fn query_request(
+    collection: &str,
+    mode: SearchMode,
+    question: &str,
+    limit: u64,
+    embed: impl AsyncFnOnce(&str) -> Result<Vec<f32>>,
+) -> Result<QueryPointsBuilder> {
+    let request = QueryPointsBuilder::new(collection)
+        .with_payload(true)
+        .limit(limit);
+    let sparse_query =
+        || Query::new_nearest(DocumentBuilder::new(question, SPARSE_MODEL_NAME).build());
 
-/// Score floor for a search mode, keeping the threshold tied to the mode that
-/// produced the score.
-fn threshold(mode: SearchMode) -> f32 {
-    match mode {
-        SearchMode::Hybrid => HYBRID_THRESHOLD,
-        SearchMode::Dense => DENSE_THRESHOLD,
-        SearchMode::Sparse => SPARSE_THRESHOLD,
-    }
+    Ok(match mode {
+        SearchMode::Hybrid => {
+            let dense = embed(question).await?;
+            let sparse_prefetch = PrefetchQueryBuilder::default()
+                .using(SPARSE_VECTOR_NAME)
+                .query(sparse_query())
+                .limit(HYBRID_PREFETCH_LIMIT);
+            let dense_prefetch = PrefetchQueryBuilder::default()
+                .using(DENSE_VECTOR_NAME)
+                .query(Query::new_nearest(dense))
+                .limit(HYBRID_PREFETCH_LIMIT);
+            request
+                .add_prefetch(sparse_prefetch)
+                .add_prefetch(dense_prefetch)
+                .query(Query::new_rrf(Rrf {
+                    k: Some(RRF_K),
+                    weights: vec![SPARSE_WEIGHT, DENSE_WEIGHT],
+                }))
+        }
+        SearchMode::Dense => {
+            let dense = embed(question).await?;
+            request
+                .using(DENSE_VECTOR_NAME)
+                .query(Query::new_nearest(dense))
+        }
+        SearchMode::Sparse => request.using(SPARSE_VECTOR_NAME).query(sparse_query()),
+    })
 }
 
 pub fn client(url: &str) -> Result<Qdrant> {
@@ -209,15 +241,18 @@ impl Store {
     }
 
     /// Returns the `k` chunks most relevant to `question`, best first, using
-    /// the vectors selected by `mode`; drops any hit below that mode's score
-    /// floor.
+    /// the vectors selected by `mode`.
     ///
-    /// [`SearchMode::Hybrid`] (the default) fuses a BM25 sparse prefetch and a
-    /// dense prefetch with Reciprocal Rank Fusion; [`SearchMode::Dense`] and
-    /// [`SearchMode::Sparse`] query one vector directly. Scores are not
-    /// comparable across modes: a cosine similarity for [`SearchMode::Dense`],
-    /// a BM25 score for [`SearchMode::Sparse`], and an RRF score for
-    /// [`SearchMode::Hybrid`].
+    /// [`SearchMode::Hybrid`] fuses a BM25 sparse prefetch and a dense prefetch
+    /// with Reciprocal Rank Fusion; [`SearchMode::Dense`] and
+    /// [`SearchMode::Sparse`] query one vector directly (sparse never embeds the
+    /// question locally). No score cutoff is applied, so a query returns up to
+    /// `k` hits. Raw retrieval scores are per-mode — an RRF score for
+    /// [`SearchMode::Hybrid`], a cosine similarity for [`SearchMode::Dense`], and
+    /// a BM25 score for [`SearchMode::Sparse`] — so they are not comparable across
+    /// modes. When a reranker rescores a hit, the returned score is the
+    /// reranker's relevance score for the same query and model, which is
+    /// comparable across modes; the per-mode caveat applies to un-reranked hits.
     ///
     /// With a reranker configured, up to `max(k, [reranker].candidates)` hits
     /// are scored first and the result is cut to `k`. A reranker failure falls
@@ -233,41 +268,10 @@ impl Store {
             Some(reranker) => reranker.candidates().max(k),
             None => k,
         };
-
-        let sparse_query =
-            || Query::new_nearest(DocumentBuilder::new(question, SPARSE_MODEL_NAME).build());
-        let request = QueryPointsBuilder::new(&self.collection)
-            .with_payload(true)
-            .score_threshold(threshold(mode))
-            .limit(limit);
-
-        let request = match mode {
-            SearchMode::Hybrid => {
-                let dense = self.embed_question(question).await?;
-                let sparse_prefetch = PrefetchQueryBuilder::default()
-                    .using(SPARSE_VECTOR_NAME)
-                    .query(sparse_query())
-                    .limit(HYBRID_PREFETCH_LIMIT);
-                let dense_prefetch = PrefetchQueryBuilder::default()
-                    .using(DENSE_VECTOR_NAME)
-                    .query(Query::new_nearest(dense))
-                    .limit(HYBRID_PREFETCH_LIMIT);
-                request
-                    .add_prefetch(sparse_prefetch)
-                    .add_prefetch(dense_prefetch)
-                    .query(Query::new_rrf(Rrf {
-                        k: Some(RRF_K),
-                        weights: vec![SPARSE_WEIGHT, DENSE_WEIGHT],
-                    }))
-            }
-            SearchMode::Dense => {
-                let dense = self.embed_question(question).await?;
-                request
-                    .using(DENSE_VECTOR_NAME)
-                    .query(Query::new_nearest(dense))
-            }
-            SearchMode::Sparse => request.using(SPARSE_VECTOR_NAME).query(sparse_query()),
-        }
+        let request = query_request(&self.collection, mode, question, limit, async |question| {
+            self.embed_question(question).await
+        })
+        .await?
         .build();
 
         let response = self
@@ -286,13 +290,13 @@ impl Store {
             .collect::<Result<_>>()?;
 
         if self.log_eval_metrics {
-            eval_metrics::log_search(question, k, hits.len(), started.elapsed());
+            eval_metrics::log_search(question, k, mode, hits.len(), started.elapsed());
         }
 
         if let Some(reranker) = &self.reranker {
             let documents: Vec<String> = hits.iter().map(|(chunk, _)| chunk.text.clone()).collect();
-            // On failure the reranker has already logged it and fusion is the fallback.
-            if let Ok(ranked) = reranker.rerank(question, &documents).await {
+            // On failure the reranker has already logged it and retrieval order is the fallback.
+            if let Ok(ranked) = reranker.rerank(question, &documents, mode).await {
                 return Ok(select_reranked(hits, &ranked, k));
             }
         }
@@ -379,10 +383,138 @@ fn embedding_worker(mut model: TextEmbedding, mut rx: mpsc::Receiver<EmbedReques
 #[cfg(test)]
 mod tests {
     use super::*;
+    use qdrant_client::qdrant::{
+        query::Variant as QueryVariant, vector_input::Variant as VectorVariant,
+    };
 
-    #[test]
-    fn hybrid_is_the_default_mode() {
-        assert_eq!(SearchMode::default(), SearchMode::Hybrid);
+    fn nearest_variant(request: &qdrant_client::qdrant::QueryPoints) -> VectorVariant {
+        match request
+            .query
+            .as_ref()
+            .and_then(|query| query.variant.as_ref())
+        {
+            Some(QueryVariant::Nearest(vector)) => {
+                vector.variant.clone().expect("nearest query has a vector")
+            }
+            _ => panic!("expected a nearest query"),
+        }
+    }
+
+    #[tokio::test]
+    async fn dense_request_embeds_the_question_and_uses_only_the_dense_vector() {
+        let request = query_request(
+            "docs-test",
+            SearchMode::Dense,
+            "how do tokens work?",
+            7,
+            async |_| Ok(vec![0.25, -0.5]),
+        )
+        .await
+        .expect("dense query request")
+        .build();
+
+        assert_eq!(request.using.as_deref(), Some(DENSE_VECTOR_NAME));
+        assert!(request.prefetch.is_empty());
+        assert_eq!(request.limit, Some(7));
+        // A `0.0` threshold would drop negative cosine similarities; unset is
+        // the only disabled representation.
+        assert_eq!(request.score_threshold, None);
+        match nearest_variant(&request) {
+            VectorVariant::Dense(dense) => assert_eq!(dense.data, vec![0.25, -0.5]),
+            other => panic!("expected a dense query vector, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn sparse_request_uses_bm25_without_an_embedding() {
+        let embedded = std::cell::Cell::new(false);
+        let request = query_request(
+            "docs-test",
+            SearchMode::Sparse,
+            "rust ownership",
+            3,
+            async |_| {
+                embedded.set(true);
+                Ok(vec![0.0])
+            },
+        )
+        .await
+        .expect("sparse query request")
+        .build();
+
+        assert!(!embedded.get(), "sparse search must not embed the question");
+        assert_eq!(request.using.as_deref(), Some(SPARSE_VECTOR_NAME));
+        assert!(request.prefetch.is_empty());
+        assert_eq!(request.score_threshold, None);
+        match nearest_variant(&request) {
+            VectorVariant::Document(document) => {
+                assert_eq!(document.text, "rust ownership");
+                assert_eq!(document.model, SPARSE_MODEL_NAME);
+            }
+            other => panic!("expected a BM25 document query, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn hybrid_request_prefetches_sparse_then_dense_with_rrf_weights() {
+        let request = query_request(
+            "docs-test",
+            SearchMode::Hybrid,
+            "question",
+            20,
+            async |_| Ok(vec![1.0, 2.0]),
+        )
+        .await
+        .expect("hybrid query request")
+        .build();
+
+        assert_eq!(request.score_threshold, None);
+        assert_eq!(request.prefetch.len(), 2);
+
+        // The weights are positional: sparse must stay first.
+        assert_eq!(
+            request.prefetch[0].using.as_deref(),
+            Some(SPARSE_VECTOR_NAME)
+        );
+        assert_eq!(
+            request.prefetch[1].using.as_deref(),
+            Some(DENSE_VECTOR_NAME)
+        );
+        assert_eq!(request.prefetch[0].limit, Some(HYBRID_PREFETCH_LIMIT));
+        assert_eq!(request.prefetch[1].limit, Some(HYBRID_PREFETCH_LIMIT));
+
+        match request.prefetch[0]
+            .query
+            .as_ref()
+            .and_then(|query| query.variant.as_ref())
+        {
+            Some(QueryVariant::Nearest(vector)) => {
+                assert!(matches!(vector.variant, Some(VectorVariant::Document(_))));
+            }
+            _ => panic!("sparse prefetch must query a BM25 document"),
+        }
+        match request.prefetch[1]
+            .query
+            .as_ref()
+            .and_then(|query| query.variant.as_ref())
+        {
+            Some(QueryVariant::Nearest(vector)) => {
+                assert!(matches!(vector.variant, Some(VectorVariant::Dense(_))));
+            }
+            _ => panic!("dense prefetch must query the dense vector"),
+        }
+
+        match request
+            .query
+            .as_ref()
+            .and_then(|query| query.variant.as_ref())
+        {
+            Some(QueryVariant::Rrf(rrf)) => {
+                assert_eq!(rrf.k, Some(RRF_K));
+                assert_eq!(rrf.weights, vec![SPARSE_WEIGHT, DENSE_WEIGHT]);
+            }
+            _ => panic!("hybrid request must fuse with RRF"),
+        }
     }
 
     fn hit(text: &str, score: f32) -> (DocChunk, f32) {
@@ -425,7 +557,7 @@ mod tests {
     }
 
     #[test]
-    fn select_reranked_appends_omitted_candidates_in_fused_order() {
+    fn select_reranked_appends_omitted_candidates_in_retrieval_order() {
         let hits = vec![hit("a", 0.9), hit("b", 0.8), hit("c", 0.7)];
         let ranked = vec![Ranked {
             index: 1,

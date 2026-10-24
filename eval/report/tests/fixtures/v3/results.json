@@ -1,0 +1,1358 @@
+{
+  "schema_version": 3,
+  "experiment": "baseline",
+  "run": "2026-10-10T12-00-00Z",
+  "started_at": "2026-10-10T12:00:00Z",
+  "commit": "f57809d1c2b3a4d5e6f708192a3b4c5d6e7f8091",
+  "commit_ref": "origin/main",
+  "config": {
+    "single-project": {
+      "rig-rag.toml": {
+        "qdrant": {
+          "url": "http://localhost:6334"
+        },
+        "embedding": {
+          "model": "bge-small-en-v1.5"
+        },
+        "corpus": {
+          "prefix": "eval-single-project",
+          "data_root": "data/single-project"
+        },
+        "collection": {
+          "active": "eval-single-project-bge-small-en-v1-5-f017d3d86bc1"
+        }
+      },
+      "sources.json": [
+        {
+          "name": "jj",
+          "url": "https://github.com/jj-vcs/jj",
+          "ref": "9a1ad09b16e87d5d5e25759e5027953f8257be98"
+        }
+      ]
+    },
+    "multi-project": {
+      "rig-rag.toml": {
+        "qdrant": {
+          "url": "http://localhost:6334"
+        },
+        "embedding": {
+          "model": "bge-small-en-v1.5"
+        },
+        "corpus": {
+          "prefix": "eval-multi-project",
+          "data_root": "data/multi-project"
+        },
+        "collection": {
+          "active": "eval-multi-project-bge-small-en-v1-5-a3ea89d89f3c"
+        }
+      },
+      "sources.json": [
+        {
+          "name": "jj",
+          "url": "https://github.com/jj-vcs/jj",
+          "ref": "9a1ad09b16e87d5d5e25759e5027953f8257be98"
+        },
+        {
+          "name": "podman",
+          "url": "https://github.com/containers/podman",
+          "ref": "e3ed4e39137fbe457dbf09c4a9d66d6e1f31e365"
+        },
+        {
+          "name": "qdrant",
+          "url": "https://github.com/qdrant/qdrant",
+          "ref": "9855e50fc739de44a223a1c50faced806a868b6a"
+        }
+      ]
+    }
+  },
+  "environment": {
+    "os": "darwin",
+    "arch": "arm64",
+    "python": "3.11.9",
+    "binary": "target/release/rig-rag",
+    "binary_sha256": "0f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c4b5a69788796a5b4c3d2e1f0",
+    "qdrant_url": "http://localhost:6334"
+  },
+  "modes": [
+    "hybrid",
+    "dense",
+    "sparse"
+  ],
+  "k_values": [
+    3,
+    7,
+    20
+  ],
+  "profiles": {
+    "single-project": {
+      "collection": "eval-single-project-bge-small-en-v1-5-f017d3d86bc1",
+      "prefix": "eval-single-project",
+      "data_root": "data/single-project",
+      "source_names": [
+        "jj"
+      ],
+      "modes": {
+        "hybrid": {
+          "timings": {
+            "search": {
+              "samples_ms": [
+                8.0,
+                12.1
+              ],
+              "p50_ms": 10.05,
+              "p95_ms": 11.895,
+              "mean_ms": 10.05,
+              "sum_ms": 20.1
+            },
+            "rerank": {
+              "samples_ms": [
+                900.0,
+                912.0
+              ],
+              "p50_ms": 906.0,
+              "p95_ms": 911.4,
+              "mean_ms": 906.0,
+              "sum_ms": 1812.0
+            },
+            "e2e": {
+              "samples_ms": [
+                918.6,
+                924.8
+              ],
+              "p50_ms": 921.7,
+              "p95_ms": 924.49,
+              "mean_ms": 921.7,
+              "sum_ms": 1843.4
+            }
+          },
+          "rerank": {
+            "calls": 2,
+            "documents": 60,
+            "tokens": 78,
+            "cost": 0.000702,
+            "cost_rub": 0.06,
+            "p50_ms": 906.0,
+            "p95_ms": 911.4,
+            "failures": 0
+          }
+        },
+        "dense": {
+          "timings": {
+            "search": {
+              "samples_ms": [
+                9.0,
+                13.2
+              ],
+              "p50_ms": 11.1,
+              "p95_ms": 12.989999999999998,
+              "mean_ms": 11.1,
+              "sum_ms": 22.2
+            },
+            "rerank": {
+              "samples_ms": [
+                910.0,
+                918.0
+              ],
+              "p50_ms": 914.0,
+              "p95_ms": 917.6,
+              "mean_ms": 914.0,
+              "sum_ms": 1828.0
+            },
+            "e2e": {
+              "samples_ms": [
+                929.2,
+                935.0
+              ],
+              "p50_ms": 932.1,
+              "p95_ms": 934.71,
+              "mean_ms": 932.1,
+              "sum_ms": 1864.2
+            }
+          },
+          "rerank": {
+            "calls": 2,
+            "documents": 60,
+            "tokens": 80,
+            "cost": 0.00072,
+            "cost_rub": 0.06,
+            "p50_ms": 914.0,
+            "p95_ms": 917.6,
+            "failures": 0
+          }
+        },
+        "sparse": {
+          "timings": {
+            "search": {
+              "samples_ms": [
+                2.4,
+                7.6
+              ],
+              "p50_ms": 5.0,
+              "p95_ms": 7.34,
+              "mean_ms": 5.0,
+              "sum_ms": 10.0
+            },
+            "rerank": {
+              "samples_ms": [
+                880.0,
+                885.0
+              ],
+              "p50_ms": 882.5,
+              "p95_ms": 884.75,
+              "mean_ms": 882.5,
+              "sum_ms": 1765.0
+            },
+            "e2e": {
+              "samples_ms": [
+                892.8,
+                897.5
+              ],
+              "p50_ms": 895.15,
+              "p95_ms": 897.265,
+              "mean_ms": 895.15,
+              "sum_ms": 1790.3
+            }
+          },
+          "rerank": {
+            "calls": 2,
+            "documents": 60,
+            "tokens": 76,
+            "cost": 0.00068,
+            "cost_rub": 0.06,
+            "p50_ms": 882.5,
+            "p95_ms": 884.75,
+            "failures": 0
+          }
+        }
+      },
+      "questions": [
+        {
+          "id": "jj-new-change",
+          "question": "How do I create a new change in jj?",
+          "answerable": true,
+          "gold": [
+            {
+              "source": "jj",
+              "path": "testimonials.md",
+              "must_contain": "project creator and leader"
+            }
+          ],
+          "notes": "How-to.",
+          "modes": {
+            "hybrid": {
+              "by_k": {
+                "3": {
+                  "answerable": true,
+                  "hits_returned": 1,
+                  "no_hit": null,
+                  "hit": 1,
+                  "recall": 1.0,
+                  "precision": 1.0,
+                  "mrr": 1.0,
+                  "purity": 1.0
+                },
+                "7": {
+                  "answerable": true,
+                  "hits_returned": 2,
+                  "no_hit": null,
+                  "hit": 1,
+                  "recall": 1.0,
+                  "precision": 0.5,
+                  "mrr": 1.0,
+                  "purity": 1.0
+                },
+                "20": {
+                  "answerable": true,
+                  "hits_returned": 3,
+                  "no_hit": null,
+                  "hit": 1,
+                  "recall": 1.0,
+                  "precision": 0.333,
+                  "mrr": 1.0,
+                  "purity": 1.0,
+                  "hits": [
+                    "testimonials.md:1-4",
+                    "cli-reference.md:10-12",
+                    "config.md:5-8"
+                  ]
+                }
+              },
+              "timings": {
+                "e2e_ms": 918.6,
+                "search_ms": 8.0,
+                "rerank_ms": 900.0
+              },
+              "rerank": {
+                "docs": 30,
+                "results": 30,
+                "tokens": 39,
+                "cost": 0.000351,
+                "cost_rub": 0.03,
+                "status": "success"
+              }
+            },
+            "dense": {
+              "by_k": {
+                "3": {
+                  "answerable": true,
+                  "hits_returned": 1,
+                  "no_hit": null,
+                  "hit": 1,
+                  "recall": 1.0,
+                  "precision": 1.0,
+                  "mrr": 1.0,
+                  "purity": 1.0
+                },
+                "7": {
+                  "answerable": true,
+                  "hits_returned": 2,
+                  "no_hit": null,
+                  "hit": 1,
+                  "recall": 1.0,
+                  "precision": 0.5,
+                  "mrr": 1.0,
+                  "purity": 1.0
+                },
+                "20": {
+                  "answerable": true,
+                  "hits_returned": 3,
+                  "no_hit": null,
+                  "hit": 1,
+                  "recall": 1.0,
+                  "precision": 0.333,
+                  "mrr": 1.0,
+                  "purity": 1.0,
+                  "hits": [
+                    "testimonials.md:1-4",
+                    "cli-reference.md:10-12",
+                    "config.md:5-8"
+                  ]
+                }
+              },
+              "timings": {
+                "e2e_ms": 929.2,
+                "search_ms": 9.0,
+                "rerank_ms": 910.0
+              },
+              "rerank": {
+                "docs": 30,
+                "results": 30,
+                "tokens": 40,
+                "cost": 0.00036,
+                "cost_rub": 0.03,
+                "status": "success"
+              }
+            },
+            "sparse": {
+              "by_k": {
+                "3": {
+                  "answerable": true,
+                  "hits_returned": 1,
+                  "no_hit": null,
+                  "hit": 1,
+                  "recall": 1.0,
+                  "precision": 1.0,
+                  "mrr": 1.0,
+                  "purity": 1.0
+                },
+                "7": {
+                  "answerable": true,
+                  "hits_returned": 2,
+                  "no_hit": null,
+                  "hit": 1,
+                  "recall": 1.0,
+                  "precision": 0.5,
+                  "mrr": 1.0,
+                  "purity": 1.0
+                },
+                "20": {
+                  "answerable": true,
+                  "hits_returned": 3,
+                  "no_hit": null,
+                  "hit": 1,
+                  "recall": 1.0,
+                  "precision": 0.333,
+                  "mrr": 1.0,
+                  "purity": 1.0,
+                  "hits": [
+                    "testimonials.md:1-4",
+                    "cli-reference.md:10-12",
+                    "config.md:5-8"
+                  ]
+                }
+              },
+              "timings": {
+                "e2e_ms": 892.8,
+                "search_ms": 2.4,
+                "rerank_ms": 880.0
+              },
+              "rerank": {
+                "docs": 30,
+                "results": 30,
+                "tokens": 38,
+                "cost": 0.00034,
+                "cost_rub": 0.03,
+                "status": "success"
+              }
+            }
+          }
+        },
+        {
+          "id": "jj-author",
+          "question": "Who is the author of jj?",
+          "answerable": true,
+          "gold": [
+            {
+              "source": "jj",
+              "path": "testimonials.md",
+              "must_contain": "project creator and leader"
+            }
+          ],
+          "notes": "Paraphrase gap.",
+          "modes": {
+            "hybrid": {
+              "by_k": {
+                "3": {
+                  "answerable": true,
+                  "hits_returned": 1,
+                  "no_hit": null,
+                  "hit": 0,
+                  "recall": 0.0,
+                  "precision": 0.0,
+                  "mrr": 0.0,
+                  "purity": 1.0
+                },
+                "7": {
+                  "answerable": true,
+                  "hits_returned": 2,
+                  "no_hit": null,
+                  "hit": 0,
+                  "recall": 0.0,
+                  "precision": 0.0,
+                  "mrr": 0.0,
+                  "purity": 1.0
+                },
+                "20": {
+                  "answerable": true,
+                  "hits_returned": 3,
+                  "no_hit": null,
+                  "hit": 1,
+                  "recall": 1.0,
+                  "precision": 0.333,
+                  "mrr": 0.5,
+                  "purity": 1.0,
+                  "hits": [
+                    "config.md:5-8",
+                    "testimonials.md:1-4",
+                    "cli-reference.md:10-12"
+                  ]
+                }
+              },
+              "timings": {
+                "e2e_ms": 924.8,
+                "search_ms": 12.1,
+                "rerank_ms": 912.0
+              },
+              "rerank": {
+                "docs": 30,
+                "results": 30,
+                "tokens": 39,
+                "cost": 0.000351,
+                "cost_rub": 0.03,
+                "status": "success"
+              }
+            },
+            "dense": {
+              "by_k": {
+                "3": {
+                  "answerable": true,
+                  "hits_returned": 1,
+                  "no_hit": null,
+                  "hit": 0,
+                  "recall": 0.0,
+                  "precision": 0.0,
+                  "mrr": 0.0,
+                  "purity": 1.0
+                },
+                "7": {
+                  "answerable": true,
+                  "hits_returned": 2,
+                  "no_hit": null,
+                  "hit": 0,
+                  "recall": 0.0,
+                  "precision": 0.0,
+                  "mrr": 0.0,
+                  "purity": 1.0
+                },
+                "20": {
+                  "answerable": true,
+                  "hits_returned": 3,
+                  "no_hit": null,
+                  "hit": 0,
+                  "recall": 0.0,
+                  "precision": 0.0,
+                  "mrr": 0.0,
+                  "purity": 1.0,
+                  "hits": [
+                    "config.md:5-8",
+                    "cli-reference.md:10-12",
+                    "podman-run.md:3"
+                  ]
+                }
+              },
+              "timings": {
+                "e2e_ms": 935.0,
+                "search_ms": 13.2,
+                "rerank_ms": 918.0
+              },
+              "rerank": {
+                "docs": 30,
+                "results": 30,
+                "tokens": 40,
+                "cost": 0.00036,
+                "cost_rub": 0.03,
+                "status": "success"
+              }
+            },
+            "sparse": {
+              "by_k": {
+                "3": {
+                  "answerable": true,
+                  "hits_returned": 1,
+                  "no_hit": null,
+                  "hit": 0,
+                  "recall": 0.0,
+                  "precision": 0.0,
+                  "mrr": 0.0,
+                  "purity": 1.0
+                },
+                "7": {
+                  "answerable": true,
+                  "hits_returned": 2,
+                  "no_hit": null,
+                  "hit": 1,
+                  "recall": 1.0,
+                  "precision": 0.5,
+                  "mrr": 1.0,
+                  "purity": 1.0
+                },
+                "20": {
+                  "answerable": true,
+                  "hits_returned": 3,
+                  "no_hit": null,
+                  "hit": 1,
+                  "recall": 1.0,
+                  "precision": 0.333,
+                  "mrr": 1.0,
+                  "purity": 1.0,
+                  "hits": [
+                    "testimonials.md:1-4",
+                    "config.md:5-8",
+                    "cli-reference.md:10-12"
+                  ]
+                }
+              },
+              "timings": {
+                "e2e_ms": 897.5,
+                "search_ms": 7.6,
+                "rerank_ms": 885.0
+              },
+              "rerank": {
+                "docs": 30,
+                "results": 30,
+                "tokens": 38,
+                "cost": 0.00034,
+                "cost_rub": 0.03,
+                "status": "success"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "multi-project": {
+      "collection": "eval-multi-project-bge-small-en-v1-5-a3ea89d89f3c",
+      "prefix": "eval-multi-project",
+      "data_root": "data/multi-project",
+      "source_names": [
+        "jj",
+        "podman",
+        "qdrant"
+      ],
+      "modes": {
+        "hybrid": {
+          "timings": {
+            "search": {
+              "samples_ms": [
+                14.4,
+                12.2
+              ],
+              "p50_ms": 13.3,
+              "p95_ms": 14.29,
+              "mean_ms": 13.3,
+              "sum_ms": 26.6
+            },
+            "rerank": {
+              "samples_ms": [
+                1200.0,
+                2001.0
+              ],
+              "p50_ms": 1600.5,
+              "p95_ms": 1960.9499999999998,
+              "mean_ms": 1600.5,
+              "sum_ms": 3201.0
+            },
+            "e2e": {
+              "samples_ms": [
+                1214.4,
+                2013.2
+              ],
+              "p50_ms": 1613.8000000000002,
+              "p95_ms": 1973.26,
+              "mean_ms": 1613.8000000000002,
+              "sum_ms": 3227.6000000000004
+            }
+          },
+          "rerank": {
+            "calls": 2,
+            "documents": 60,
+            "tokens": 39,
+            "cost": 0.000351,
+            "cost_rub": 0.03,
+            "p50_ms": 1600.5,
+            "p95_ms": 1960.9499999999998,
+            "failures": 1
+          }
+        },
+        "dense": {
+          "timings": {
+            "search": {
+              "samples_ms": [
+                15.1,
+                10.4
+              ],
+              "p50_ms": 12.75,
+              "p95_ms": 14.864999999999998,
+              "mean_ms": 12.75,
+              "sum_ms": 25.5
+            },
+            "rerank": {
+              "samples_ms": [
+                1205.0,
+                1900.0
+              ],
+              "p50_ms": 1552.5,
+              "p95_ms": 1865.25,
+              "mean_ms": 1552.5,
+              "sum_ms": 3105.0
+            },
+            "e2e": {
+              "samples_ms": [
+                1220.1,
+                1910.4
+              ],
+              "p50_ms": 1565.25,
+              "p95_ms": 1875.8850000000002,
+              "mean_ms": 1565.25,
+              "sum_ms": 3130.5
+            }
+          },
+          "rerank": {
+            "calls": 2,
+            "documents": 60,
+            "tokens": 40,
+            "cost": 0.00036,
+            "cost_rub": 0.03,
+            "p50_ms": 1552.5,
+            "p95_ms": 1865.25,
+            "failures": 0
+          }
+        },
+        "sparse": {
+          "timings": {
+            "search": {
+              "samples_ms": [
+                9.8,
+                10.6
+              ],
+              "p50_ms": 10.2,
+              "p95_ms": 10.559999999999999,
+              "mean_ms": 10.2,
+              "sum_ms": 20.4
+            },
+            "rerank": {
+              "samples_ms": [
+                1180.0,
+                1700.0
+              ],
+              "p50_ms": 1440.0,
+              "p95_ms": 1674.0,
+              "mean_ms": 1440.0,
+              "sum_ms": 2880.0
+            },
+            "e2e": {
+              "samples_ms": [
+                1189.8,
+                1710.6
+              ],
+              "p50_ms": 1450.1999999999998,
+              "p95_ms": 1684.56,
+              "mean_ms": 1450.1999999999998,
+              "sum_ms": 2900.3999999999996
+            }
+          },
+          "rerank": {
+            "calls": 2,
+            "documents": 60,
+            "tokens": 38,
+            "cost": 0.00034,
+            "cost_rub": 0.03,
+            "p50_ms": 1440.0,
+            "p95_ms": 1674.0,
+            "failures": 0
+          }
+        }
+      },
+      "questions": [
+        {
+          "id": "jj-new-change",
+          "question": "How do I create a new change in jj?",
+          "answerable": true,
+          "gold": [
+            {
+              "source": "jj",
+              "path": "testimonials.md",
+              "must_contain": "project creator and leader"
+            }
+          ],
+          "notes": "How-to.",
+          "modes": {
+            "hybrid": {
+              "by_k": {
+                "3": {
+                  "answerable": true,
+                  "hits_returned": 1,
+                  "no_hit": null,
+                  "hit": 0,
+                  "recall": 0.0,
+                  "precision": 0.0,
+                  "mrr": 0.0,
+                  "purity": 0.0
+                },
+                "7": {
+                  "answerable": true,
+                  "hits_returned": 2,
+                  "no_hit": null,
+                  "hit": 0,
+                  "recall": 0.0,
+                  "precision": 0.0,
+                  "mrr": 0.0,
+                  "purity": 0.5
+                },
+                "20": {
+                  "answerable": true,
+                  "hits_returned": 2,
+                  "no_hit": null,
+                  "hit": 0,
+                  "recall": 0.0,
+                  "precision": 0.0,
+                  "mrr": 0.0,
+                  "purity": 0.5,
+                  "hits": [
+                    "config.md:5-8",
+                    "podman-run.md:3"
+                  ]
+                }
+              },
+              "timings": {
+                "e2e_ms": 1214.4,
+                "search_ms": 14.4,
+                "rerank_ms": 1200.0
+              },
+              "rerank": {
+                "docs": 30,
+                "results": 30,
+                "tokens": 39,
+                "cost": 0.000351,
+                "cost_rub": 0.03,
+                "status": "success"
+              }
+            },
+            "dense": {
+              "by_k": {
+                "3": {
+                  "answerable": true,
+                  "hits_returned": 1,
+                  "no_hit": null,
+                  "hit": 0,
+                  "recall": 0.0,
+                  "precision": 0.0,
+                  "mrr": 0.0,
+                  "purity": 0.0
+                },
+                "7": {
+                  "answerable": true,
+                  "hits_returned": 1,
+                  "no_hit": null,
+                  "hit": 0,
+                  "recall": 0.0,
+                  "precision": 0.0,
+                  "mrr": 0.0,
+                  "purity": 0.0
+                },
+                "20": {
+                  "answerable": true,
+                  "hits_returned": 2,
+                  "no_hit": null,
+                  "hit": 1,
+                  "recall": 1.0,
+                  "precision": 0.5,
+                  "mrr": 0.5,
+                  "purity": 0.5,
+                  "hits": [
+                    "config.md:5-8",
+                    "testimonials.md:1-4"
+                  ]
+                }
+              },
+              "timings": {
+                "e2e_ms": 1220.1,
+                "search_ms": 15.1,
+                "rerank_ms": 1205.0
+              },
+              "rerank": {
+                "docs": 30,
+                "results": 30,
+                "tokens": 40,
+                "cost": 0.00036,
+                "cost_rub": 0.03,
+                "status": "success"
+              }
+            },
+            "sparse": {
+              "by_k": {
+                "3": {
+                  "answerable": true,
+                  "hits_returned": 1,
+                  "no_hit": null,
+                  "hit": 0,
+                  "recall": 0.0,
+                  "precision": 0.0,
+                  "mrr": 0.0,
+                  "purity": 0.0
+                },
+                "7": {
+                  "answerable": true,
+                  "hits_returned": 2,
+                  "no_hit": null,
+                  "hit": 0,
+                  "recall": 0.0,
+                  "precision": 0.0,
+                  "mrr": 0.0,
+                  "purity": 0.5
+                },
+                "20": {
+                  "answerable": true,
+                  "hits_returned": 2,
+                  "no_hit": null,
+                  "hit": 0,
+                  "recall": 0.0,
+                  "precision": 0.0,
+                  "mrr": 0.0,
+                  "purity": 0.5,
+                  "hits": [
+                    "config.md:5-8",
+                    "podman-run.md:3"
+                  ]
+                }
+              },
+              "timings": {
+                "e2e_ms": 1189.8,
+                "search_ms": 9.8,
+                "rerank_ms": 1180.0
+              },
+              "rerank": {
+                "docs": 30,
+                "results": 30,
+                "tokens": 38,
+                "cost": 0.00034,
+                "cost_rub": 0.03,
+                "status": "success"
+              }
+            }
+          }
+        },
+        {
+          "id": "unanswerable-license",
+          "question": "Which license did the maintainers choose, and why?",
+          "answerable": false,
+          "gold": [],
+          "notes": "Expected: no hit above threshold.",
+          "modes": {
+            "hybrid": {
+              "by_k": {
+                "3": {
+                  "answerable": false,
+                  "hits_returned": 1,
+                  "no_hit": 0,
+                  "hit": null,
+                  "recall": null,
+                  "precision": null,
+                  "mrr": null,
+                  "purity": null
+                },
+                "7": {
+                  "answerable": false,
+                  "hits_returned": 2,
+                  "no_hit": 0,
+                  "hit": null,
+                  "recall": null,
+                  "precision": null,
+                  "mrr": null,
+                  "purity": null
+                },
+                "20": {
+                  "answerable": false,
+                  "hits_returned": 2,
+                  "no_hit": 0,
+                  "hit": null,
+                  "recall": null,
+                  "precision": null,
+                  "mrr": null,
+                  "purity": null,
+                  "hits": [
+                    "config.md:1-2",
+                    "patch.md:5"
+                  ]
+                }
+              },
+              "timings": {
+                "e2e_ms": 2013.2,
+                "search_ms": 12.2,
+                "rerank_ms": 2001.0
+              },
+              "rerank": {
+                "docs": 30,
+                "results": 0,
+                "tokens": null,
+                "cost": null,
+                "cost_rub": null,
+                "status": "failed"
+              }
+            },
+            "dense": {
+              "by_k": {
+                "3": {
+                  "answerable": false,
+                  "hits_returned": 0,
+                  "no_hit": 1,
+                  "hit": null,
+                  "recall": null,
+                  "precision": null,
+                  "mrr": null,
+                  "purity": null
+                },
+                "7": {
+                  "answerable": false,
+                  "hits_returned": 1,
+                  "no_hit": 0,
+                  "hit": null,
+                  "recall": null,
+                  "precision": null,
+                  "mrr": null,
+                  "purity": null
+                },
+                "20": {
+                  "answerable": false,
+                  "hits_returned": 1,
+                  "no_hit": 0,
+                  "hit": null,
+                  "recall": null,
+                  "precision": null,
+                  "mrr": null,
+                  "purity": null,
+                  "hits": [
+                    "config.md:1-2"
+                  ]
+                }
+              },
+              "timings": {
+                "e2e_ms": 1910.4,
+                "search_ms": 10.4,
+                "rerank_ms": 1900.0
+              },
+              "rerank": {
+                "docs": 30,
+                "results": 0,
+                "tokens": 0,
+                "cost": 0.0,
+                "cost_rub": 0.0,
+                "status": "success"
+              }
+            },
+            "sparse": {
+              "by_k": {
+                "3": {
+                  "answerable": false,
+                  "hits_returned": 1,
+                  "no_hit": 0,
+                  "hit": null,
+                  "recall": null,
+                  "precision": null,
+                  "mrr": null,
+                  "purity": null
+                },
+                "7": {
+                  "answerable": false,
+                  "hits_returned": 1,
+                  "no_hit": 0,
+                  "hit": null,
+                  "recall": null,
+                  "precision": null,
+                  "mrr": null,
+                  "purity": null
+                },
+                "20": {
+                  "answerable": false,
+                  "hits_returned": 2,
+                  "no_hit": 0,
+                  "hit": null,
+                  "recall": null,
+                  "precision": null,
+                  "mrr": null,
+                  "purity": null,
+                  "hits": [
+                    "config.md:1-2",
+                    "patch.md:5"
+                  ]
+                }
+              },
+              "timings": {
+                "e2e_ms": 1710.6,
+                "search_ms": 10.6,
+                "rerank_ms": 1700.0
+              },
+              "rerank": {
+                "docs": 30,
+                "results": 0,
+                "tokens": 0,
+                "cost": 0.0,
+                "cost_rub": 0.0,
+                "status": "success"
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  "degradation": {
+    "single-project->multi-project": {
+      "from": "single-project",
+      "to": "multi-project",
+      "questions_compared": [
+        "jj-new-change"
+      ],
+      "modes": {
+        "hybrid": {
+          "recall@3": -1.0,
+          "recall@7": -1.0,
+          "recall@20": -1.0,
+          "purity@3": -1.0,
+          "purity@7": -0.5,
+          "purity@20": -0.5,
+          "mrr@3": -1.0,
+          "mrr@7": -1.0,
+          "mrr@20": -1.0,
+          "p95_ms": 1048.77
+        },
+        "dense": {
+          "recall@3": -1.0,
+          "recall@7": -1.0,
+          "recall@20": 0.0,
+          "purity@3": -1.0,
+          "purity@7": -1.0,
+          "purity@20": -0.5,
+          "mrr@3": -1.0,
+          "mrr@7": -1.0,
+          "mrr@20": -0.5,
+          "p95_ms": 941.1750000000002
+        },
+        "sparse": {
+          "recall@3": -1.0,
+          "recall@7": -1.0,
+          "recall@20": -1.0,
+          "purity@3": -1.0,
+          "purity@7": -0.5,
+          "purity@20": -0.5,
+          "mrr@3": -1.0,
+          "mrr@7": -1.0,
+          "mrr@20": -1.0,
+          "p95_ms": 787.295
+        }
+      }
+    }
+  },
+  "summary": {
+    "single-project": {
+      "questions_applied": 2,
+      "answerable": 2,
+      "unanswerable": 0,
+      "modes": {
+        "hybrid": {
+          "mean_recall": {
+            "recall@3": 0.5,
+            "recall@7": 0.5,
+            "recall@20": 1.0
+          },
+          "mean_purity@3": 1.0,
+          "mean_purity@7": 1.0,
+          "mean_purity@20": 1.0,
+          "mean_mrr@3": 0.5,
+          "mean_mrr@7": 0.5,
+          "mean_mrr@20": 0.75,
+          "unanswerable_no_hit_rate": null,
+          "timings": {
+            "search": {
+              "p50_ms": 10.05,
+              "p95_ms": 11.895,
+              "mean_ms": 10.05
+            },
+            "rerank": {
+              "p50_ms": 906.0,
+              "p95_ms": 911.4,
+              "mean_ms": 906.0
+            },
+            "e2e": {
+              "p50_ms": 921.7,
+              "p95_ms": 924.49,
+              "mean_ms": 921.7
+            }
+          },
+          "rerank": {
+            "calls": 2,
+            "documents": 60,
+            "tokens": 78,
+            "cost": 0.000702,
+            "cost_rub": 0.06,
+            "p50_ms": 906.0,
+            "p95_ms": 911.4,
+            "failures": 0
+          }
+        },
+        "dense": {
+          "mean_recall": {
+            "recall@3": 0.5,
+            "recall@7": 0.5,
+            "recall@20": 0.5
+          },
+          "mean_purity@3": 1.0,
+          "mean_purity@7": 1.0,
+          "mean_purity@20": 1.0,
+          "mean_mrr@3": 0.5,
+          "mean_mrr@7": 0.5,
+          "mean_mrr@20": 0.5,
+          "unanswerable_no_hit_rate": null,
+          "timings": {
+            "search": {
+              "p50_ms": 11.1,
+              "p95_ms": 12.989999999999998,
+              "mean_ms": 11.1
+            },
+            "rerank": {
+              "p50_ms": 914.0,
+              "p95_ms": 917.6,
+              "mean_ms": 914.0
+            },
+            "e2e": {
+              "p50_ms": 932.1,
+              "p95_ms": 934.71,
+              "mean_ms": 932.1
+            }
+          },
+          "rerank": {
+            "calls": 2,
+            "documents": 60,
+            "tokens": 80,
+            "cost": 0.00072,
+            "cost_rub": 0.06,
+            "p50_ms": 914.0,
+            "p95_ms": 917.6,
+            "failures": 0
+          }
+        },
+        "sparse": {
+          "mean_recall": {
+            "recall@3": 0.5,
+            "recall@7": 1.0,
+            "recall@20": 1.0
+          },
+          "mean_purity@3": 1.0,
+          "mean_purity@7": 1.0,
+          "mean_purity@20": 1.0,
+          "mean_mrr@3": 0.5,
+          "mean_mrr@7": 1.0,
+          "mean_mrr@20": 1.0,
+          "unanswerable_no_hit_rate": null,
+          "timings": {
+            "search": {
+              "p50_ms": 5.0,
+              "p95_ms": 7.34,
+              "mean_ms": 5.0
+            },
+            "rerank": {
+              "p50_ms": 882.5,
+              "p95_ms": 884.75,
+              "mean_ms": 882.5
+            },
+            "e2e": {
+              "p50_ms": 895.15,
+              "p95_ms": 897.265,
+              "mean_ms": 895.15
+            }
+          },
+          "rerank": {
+            "calls": 2,
+            "documents": 60,
+            "tokens": 76,
+            "cost": 0.00068,
+            "cost_rub": 0.06,
+            "p50_ms": 882.5,
+            "p95_ms": 884.75,
+            "failures": 0
+          }
+        }
+      }
+    },
+    "multi-project": {
+      "questions_applied": 2,
+      "answerable": 1,
+      "unanswerable": 1,
+      "modes": {
+        "hybrid": {
+          "mean_recall": {
+            "recall@3": 0.0,
+            "recall@7": 0.0,
+            "recall@20": 0.0
+          },
+          "mean_purity@3": 0.0,
+          "mean_purity@7": 0.5,
+          "mean_purity@20": 0.5,
+          "mean_mrr@3": 0.0,
+          "mean_mrr@7": 0.0,
+          "mean_mrr@20": 0.0,
+          "unanswerable_no_hit_rate": 0.0,
+          "timings": {
+            "search": {
+              "p50_ms": 13.3,
+              "p95_ms": 14.29,
+              "mean_ms": 13.3
+            },
+            "rerank": {
+              "p50_ms": 1600.5,
+              "p95_ms": 1960.9499999999998,
+              "mean_ms": 1600.5
+            },
+            "e2e": {
+              "p50_ms": 1613.8000000000002,
+              "p95_ms": 1973.26,
+              "mean_ms": 1613.8000000000002
+            }
+          },
+          "rerank": {
+            "calls": 2,
+            "documents": 60,
+            "tokens": 39,
+            "cost": 0.000351,
+            "cost_rub": 0.03,
+            "p50_ms": 1600.5,
+            "p95_ms": 1960.9499999999998,
+            "failures": 1
+          }
+        },
+        "dense": {
+          "mean_recall": {
+            "recall@3": 0.0,
+            "recall@7": 0.0,
+            "recall@20": 1.0
+          },
+          "mean_purity@3": 0.0,
+          "mean_purity@7": 0.0,
+          "mean_purity@20": 0.5,
+          "mean_mrr@3": 0.0,
+          "mean_mrr@7": 0.0,
+          "mean_mrr@20": 0.5,
+          "unanswerable_no_hit_rate": 0.3333333333333333,
+          "timings": {
+            "search": {
+              "p50_ms": 12.75,
+              "p95_ms": 14.864999999999998,
+              "mean_ms": 12.75
+            },
+            "rerank": {
+              "p50_ms": 1552.5,
+              "p95_ms": 1865.25,
+              "mean_ms": 1552.5
+            },
+            "e2e": {
+              "p50_ms": 1565.25,
+              "p95_ms": 1875.8850000000002,
+              "mean_ms": 1565.25
+            }
+          },
+          "rerank": {
+            "calls": 2,
+            "documents": 60,
+            "tokens": 40,
+            "cost": 0.00036,
+            "cost_rub": 0.03,
+            "p50_ms": 1552.5,
+            "p95_ms": 1865.25,
+            "failures": 0
+          }
+        },
+        "sparse": {
+          "mean_recall": {
+            "recall@3": 0.0,
+            "recall@7": 0.0,
+            "recall@20": 0.0
+          },
+          "mean_purity@3": 0.0,
+          "mean_purity@7": 0.5,
+          "mean_purity@20": 0.5,
+          "mean_mrr@3": 0.0,
+          "mean_mrr@7": 0.0,
+          "mean_mrr@20": 0.0,
+          "unanswerable_no_hit_rate": 0.0,
+          "timings": {
+            "search": {
+              "p50_ms": 10.2,
+              "p95_ms": 10.559999999999999,
+              "mean_ms": 10.2
+            },
+            "rerank": {
+              "p50_ms": 1440.0,
+              "p95_ms": 1674.0,
+              "mean_ms": 1440.0
+            },
+            "e2e": {
+              "p50_ms": 1450.1999999999998,
+              "p95_ms": 1684.56,
+              "mean_ms": 1450.1999999999998
+            }
+          },
+          "rerank": {
+            "calls": 2,
+            "documents": 60,
+            "tokens": 38,
+            "cost": 0.00034,
+            "cost_rub": 0.03,
+            "p50_ms": 1440.0,
+            "p95_ms": 1674.0,
+            "failures": 0
+          }
+        }
+      }
+    }
+  }
+}

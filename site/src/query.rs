@@ -36,8 +36,7 @@ pub fn QueryPage() -> impl IntoView {
         loading.set(true);
 
         spawn_local(async move {
-            // The page has no mode control yet, so the server's hybrid default applies.
-            match api::query(question, k, None).await {
+            match api::query(question, k).await {
                 Ok(hits) => results.set(Some(hits)),
                 Err(message) => error.set(Some(message)),
             }

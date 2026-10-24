@@ -66,14 +66,14 @@ keep_alive_secs = 15
 `[collection].active` names the collection that `serve` reads from. It is empty
 until you promote something; until then `serve` exits with a clear error.
 
-Optional cloud reranking (omit the section for fusion-only retrieval):
+Optional cloud reranking (omit the section for retrieval without reranking):
 
 ```toml
 [reranker]
 # API root including the version segment; the app posts to {base_url}/rerank.
 base_url = "https://api.jina.ai/v1"
 model = "jina-reranker-v2-base-multilingual"
-# Fused candidates scored before cutting to k (default 30).
+# Retrieved candidates scored before cutting to k (default 30).
 candidates = 30
 # Per-request timeout; cloud rerankers can take seconds (default 10000).
 timeout_ms = 10000
@@ -81,9 +81,9 @@ timeout_ms = 10000
 
 The authorization token is read from `RERANKER_API_KEY` and sent as
 `Authorization: Bearer`; it is never stored in this tracked file. When the
-section is present, `serve` fetches `max(k, candidates)` fused hits, rescores
-them, and returns the best `k`. A reranker error or timeout falls back to the
-fused order with a warning. `serve --log-eval-metrics` emits structured
+section is present, `serve` fetches `max(k, candidates)` hits in the requested
+mode, rescores them, and returns the best `k`. A reranker error or timeout falls
+back to the retrieval order with a warning. `serve --log-eval-metrics` emits structured
 per-query `search`/`rerank` lines to stderr (correlated by a hash of the
 question) for the eval runner; it never changes retrieval behavior.
 
@@ -150,6 +150,18 @@ For `POST /api/query`, `mode` picks which vectors to search and defaults to
 `hybrid`: `"dense"` (embedding similarity only), `"sparse"` (BM25 keyword search
 only, skipping the local embedding), or `"hybrid"` (both, fused with RRF). An
 unknown value is rejected with `422`.
+
+The `score` on each returned hit is **per-mode**: an RRF score for `hybrid`, a
+cosine similarity for `dense`, and a BM25 score for `sparse`. Without a
+reranker, scores are only meaningful as a ranking within one mode and one
+response. When a reranker succeeds, every returned hit carries that reranker's
+relevance score instead, so scores are comparable across modes for the same
+query (but not across runs or reranker models); a failed rerank falls back to
+retrieval order and raw scores.
+
+The eval harness sweeps `hybrid`, `dense`, and `sparse` in one ingest/serve pass
+by default — each question is queried once per mode — and records all three in
+`results.json`; `--modes` narrows it. See [`eval/README.md`](eval/README.md).
 
 ## Web UI tests
 

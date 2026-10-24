@@ -1,3 +1,4 @@
+import copy
 import json
 import unittest
 from pathlib import Path
@@ -189,6 +190,102 @@ class NumberFormatTest(unittest.TestCase):
         self.assertEqual(_number(100.0), "100")
 
 
+class RenderModesTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.results = load_results(FIXTURES / "v3" / "results.json")
+        cls.html = render_report(cls.results)
+
+    def test_provenance_lists_every_measured_mode(self):
+        self.assertIn("hybrid, dense, sparse", self.html)
+
+    def test_has_the_search_modes_section_after_summary(self):
+        self.assertIn('id="modes"', self.html)
+        self.assertIn("Search modes", self.html)
+        self.assertLess(
+            self.html.index('id="summary"'), self.html.index('id="modes"')
+        )
+        self.assertLess(
+            self.html.index('id="modes"'), self.html.index('id="quality"')
+        )
+
+    def test_summary_is_one_mode_by_metric_table_per_profile(self):
+        summary = self.html.split('id="summary"', 1)[1].split('id="modes"', 1)[0]
+        self.assertEqual(summary.count("<h3>"), 2)
+        self.assertIn("recall@20", summary)
+        self.assertIn("purity@20", summary)
+        self.assertIn("MRR@20", summary)
+        self.assertIn("no-hit", summary)
+        self.assertIn(">hybrid<", summary)
+        self.assertIn(">dense<", summary)
+        self.assertIn(">sparse<", summary)
+        # Counts are shown once per profile, not once per mode.
+        self.assertEqual(summary.count("<th scope=\"row\">Questions</th>"), 2)
+
+    def test_modes_section_compares_recall_purity_mrr_and_latency(self):
+        modes = self.html.split('id="modes"', 1)[1].split('id="quality"', 1)[0]
+        self.assertIn("Δ dense", modes)
+        self.assertIn("Δ sparse", modes)
+        self.assertIn("recall@3", modes)
+        self.assertIn("MRR@20", modes)
+        self.assertIn("rerank cost RUB", modes)
+        self.assertIn("Per question at k=20", modes)
+        self.assertEqual(modes.count("<svg"), 2)  # one chart per profile
+
+    def test_quality_tables_are_collapsed_per_profile_and_mode(self):
+        quality = self.html.split('id="quality"', 1)[1].split('id="timing"', 1)[0]
+        self.assertEqual(quality.count("<details>"), 6)
+        self.assertNotIn("<details open", quality)
+        for k in (3, 7, 20):
+            self.assertIn(f"<h4>k={k}</h4>", quality)
+
+    def test_timing_labels_include_profile_and_mode(self):
+        timing = self.html.split('id="timing"', 1)[1].split('id="degradation"', 1)[0]
+        self.assertIn("single-project · hybrid", timing)
+        self.assertIn("multi-project · sparse", timing)
+        self.assertIn(">Mode<", timing)
+        self.assertEqual(timing.count("<svg"), 3)
+
+    def test_degradation_is_per_mode(self):
+        degradation = self.html.split('id="degradation"', 1)[1]
+        for mode in ("hybrid", "dense", "sparse"):
+            self.assertIn(f"<td>{mode}</td>", degradation)
+        self.assertIn("Δ e2e p95 ms", degradation)
+
+    def test_single_mode_run_omits_the_modes_section(self):
+        results = copy.deepcopy(self.results)
+        results["modes"] = ["hybrid"]
+        for profile in results["profiles"].values():
+            profile["modes"] = {"hybrid": profile["modes"]["hybrid"]}
+            for question in profile["questions"]:
+                question["modes"] = {"hybrid": question["modes"]["hybrid"]}
+        for entry in results["summary"].values():
+            entry["modes"] = {"hybrid": entry["modes"]["hybrid"]}
+        results["degradation"]["single-project->multi-project"]["modes"] = {
+            "hybrid": results["degradation"]["single-project->multi-project"]["modes"]["hybrid"]
+        }
+        html = render_report(results)
+        self.assertNotIn('id="modes"', html)
+        self.assertNotIn("Search modes", html)
+
+
+class RenderV2Test(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.html = render_fixture("v2")
+
+    def test_provenance_says_the_mode_was_not_recorded(self):
+        self.assertIn("not recorded (schema v2)", self.html)
+
+    def test_omits_the_modes_section(self):
+        self.assertNotIn('id="modes"', self.html)
+        self.assertNotIn("Search modes", self.html)
+
+    def test_single_unknown_series_is_rendered(self):
+        self.assertIn(">unknown<", self.html)
+        self.assertEqual(self.html.count("<details>"), 2)
+
+
 class RenderComparisonTest(unittest.TestCase):
     def setUp(self):
         self.baseline_results = load_results(FIXTURES / "v2" / "results.json")
@@ -241,6 +338,41 @@ class RenderComparisonTest(unittest.TestCase):
         self.assertIn('id="comparison"', html)
         # Provenance and the comparison's candidate-commit cell must agree.
         self.assertGreaterEqual(html.count("deadbeef"), 2)
+
+    def test_v3_retrieval_is_compared_per_mode(self):
+        v3 = load_results(FIXTURES / "v3" / "results.json")
+        html = render_report(v3, baseline=Baseline("v3 baseline", v3))
+        comparison = html.split('id="comparison"', 1)[1]
+        for mode in ("hybrid", "dense", "sparse"):
+            self.assertIn(f"<h3>Mode: {mode}</h3>", comparison)
+        self.assertIn("<th>Mode</th><th>Profile</th><th>id</th>", comparison)
+
+    def test_v3_candidate_against_a_v2_baseline_warns(self):
+        v3 = load_results(FIXTURES / "v3" / "results.json")
+        v2 = load_results(FIXTURES / "v2" / "results.json")
+        html = render_report(
+            v3,
+            baseline=Baseline("v2 baseline", v2, ingest=(self.baseline_ingest,)),
+        )
+        self.assertIn("Baseline records no search mode (schema v2)", html)
+        self.assertIn("cannot be paired until it is re-recorded", html)
+
+    def test_unmatched_modes_are_warned_about(self):
+        v3 = load_results(FIXTURES / "v3" / "results.json")
+        subset = copy.deepcopy(v3)
+        subset["modes"] = ["hybrid"]
+        for profile in subset["profiles"].values():
+            profile["modes"] = {"hybrid": profile["modes"]["hybrid"]}
+            for question in profile["questions"]:
+                question["modes"] = {"hybrid": question["modes"]["hybrid"]}
+        for entry in subset["summary"].values():
+            entry["modes"] = {"hybrid": entry["modes"]["hybrid"]}
+        subset["degradation"]["single-project->multi-project"]["modes"] = {
+            "hybrid": subset["degradation"]["single-project->multi-project"]["modes"]["hybrid"]
+        }
+        html = render_report(subset, baseline=Baseline("v3 baseline", v3))
+        self.assertIn("Baseline-only series (no candidate match)", html)
+        self.assertIn("multi-project · sparse", html)
 
     def test_comparison_is_self_contained(self):
         html = render_report(

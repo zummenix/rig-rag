@@ -47,6 +47,10 @@ footer { margin-top: 3rem; color: #6b7280; font-size: .82rem; border-top: 1px so
 dl.method { margin: .4rem 0 1rem; }
 dl.method dt { font-weight: 600; margin-top: .5rem; }
 dl.method dd { margin: .1rem 0 0 0; color: #374151; }
+details { margin: .5rem 0 .9rem; border: 1px solid #e5e7eb; border-radius: 6px; padding: .35rem .7rem; }
+details > summary { cursor: pointer; font-weight: 600; color: #374151; }
+details > summary:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
+details[open] > summary { margin-bottom: .3rem; }
 """
 
 
@@ -116,6 +120,20 @@ def kv_table(pairs: list[tuple[object, object]]) -> str:
         f'<tr><th scope="row">{esc(key)}</th><td>{_markup(value)}</td></tr>' for key, value in pairs
     )
     return f'<div class="scroll"><table><tbody>{rows}</tbody></table></div>'
+
+
+def details(summary: object, body: object, *, open: bool = False) -> str:
+    """A collapsed disclosure block (plain HTML, no script).
+
+    Used to keep the audit-grade per-question tables in the document without
+    burying the aggregate sections under them.
+    """
+
+    opened = " open" if open else ""
+    return (
+        f"<details{opened}><summary>{_markup(summary)}</summary>"
+        f"{_markup(body)}</details>"
+    )
 
 
 def figure(svg: object, caption: str) -> str:

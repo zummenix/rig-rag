@@ -46,6 +46,19 @@ class ReportMainTest(unittest.TestCase):
                 "eval/results/baseline/2026-02-01T00-00-00Z/results.json", html
             )
 
+    def test_v3_run_renders_the_search_modes_section(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            make_repo(root, ["2026-01-01T00-00-00Z"], source="v3")
+            with quiet_stdout():
+                code = report_main(experiment="baseline", repo_root=root, argv=[])
+            self.assertEqual(code, 0)
+            html = (root / "eval" / "reports" / "baseline.html").read_text(
+                encoding="utf-8"
+            )
+            self.assertIn('id="modes"', html)
+            self.assertIn("hybrid, dense, sparse", html)
+
     def test_results_and_out_overrides(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

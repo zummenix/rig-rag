@@ -47,6 +47,7 @@ class _Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         length = int(self.headers.get("content-length", 0))
         body = json.loads(self.rfile.read(length) or b"{}")
+        _Handler.last_body = body
         if self.path != "/api/query":
             self._json(404, {"error": "not found"})
             return
@@ -81,23 +82,37 @@ class QueryClientTest(unittest.TestCase):
         self.assertTrue(self.client.health())
 
     def test_query_returns_hits_and_elapsed(self):
-        hits, elapsed_ms = self.client.query("anything", 3)
+        hits, elapsed_ms = self.client.query("anything", 3, "hybrid")
         self.assertEqual(len(hits), 3)
         self.assertEqual(hits[0]["path"], "data/jj/doc0.md")
         self.assertGreaterEqual(elapsed_ms, 0.0)
 
     def test_query_caps_at_available_hits(self):
-        hits, _ = self.client.query("anything", 20)
+        hits, _ = self.client.query("anything", 20, "hybrid")
         self.assertEqual(len(hits), 3)
+
+    def test_query_sends_the_mode_explicitly(self):
+        self.client.query("anything", 3, "hybrid")
+        self.assertEqual(_Handler.last_body["mode"], "hybrid")
+
+        self.client.query("anything", 3, "dense")
+        self.assertEqual(_Handler.last_body["mode"], "dense")
+
+        self.client.query("anything", 3, "sparse")
+        self.assertEqual(_Handler.last_body["mode"], "sparse")
+
+    def test_mode_is_required(self):
+        with self.assertRaises(TypeError):
+            self.client.query("anything", 3)  # type: ignore[call-arg]
 
     def test_query_raises_on_non_200(self):
         with self.assertRaises(RuntimeError):
-            self.client.query("boom", 7)
+            self.client.query("boom", 7, "hybrid")
 
     def test_connection_error_for_dead_port(self):
         client = QueryClient("127.0.0.1", closed_port(), timeout=0.5)
         with self.assertRaises(ConnectionError):
-            client.query("x", 1)
+            client.query("x", 1, "hybrid")
         self.assertFalse(client.health())
 
 

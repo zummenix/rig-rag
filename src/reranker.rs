@@ -1,4 +1,4 @@
-//! Optional cloud reranker for fused retrieval candidates.
+//! Optional cloud reranker for retrieved candidates.
 //!
 //! The app speaks the Jina-shaped `/v1/rerank` contract: `{base_url}/rerank`
 //! receives `{model, query, documents}` and answers with
@@ -7,7 +7,7 @@
 //!
 //! Calls are best-effort: [`Reranker::rerank`] returns an error on any protocol
 //! or transport failure. Documents are sent in the order the store supplies
-//! them (the fused order), so provider indexes map directly back to it.
+//! them (retrieval order), so provider indexes map directly back to it.
 
 use std::collections::HashSet;
 use std::time::{Duration, Instant};
@@ -17,6 +17,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::config::RerankerConfig;
 use crate::eval_metrics::{self, RerankStatus, Usage};
+use shared::SearchMode;
 
 /// A scored input document, in the provider's relevance order.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -80,21 +81,29 @@ impl Reranker {
         })
     }
 
-    /// Fused candidates to request before cutting to `k`.
+    /// Retrieved candidates to request before cutting to `k`.
     pub fn candidates(&self) -> u64 {
         self.candidates
     }
 
-    /// Scores `documents` against `question`, best first. Every call reaches
-    /// the provider; a measured `rerank` line is logged when eval metrics are on
-    /// (on both success and failure).
-    pub async fn rerank(&self, question: &str, documents: &[String]) -> Result<Vec<Ranked>> {
+    /// Scores `documents` against `question` over the candidate pool produced
+    /// by `mode`, best first. Every call reaches the provider; a measured
+    /// `rerank` line is logged when eval metrics are on (on both success and
+    /// failure). `mode` is only recorded in that line; it never changes the
+    /// provider request.
+    pub async fn rerank(
+        &self,
+        question: &str,
+        documents: &[String],
+        mode: SearchMode,
+    ) -> Result<Vec<Ranked>> {
         let started = Instant::now();
         match self.score(question, documents).await {
             Ok((ranked, usage)) => {
                 if self.log_eval_metrics {
                     eval_metrics::log_rerank(
                         question,
+                        mode,
                         &self.model,
                         documents.len(),
                         ranked.len(),
@@ -110,6 +119,7 @@ impl Reranker {
                 if self.log_eval_metrics {
                     eval_metrics::log_rerank(
                         question,
+                        mode,
                         &self.model,
                         documents.len(),
                         0,
@@ -120,7 +130,7 @@ impl Reranker {
                     );
                 } else {
                     // Preserve the operator-visible warning when metrics are off.
-                    eprintln!("serve: rerank failed (falling back to fusion): {error:#}");
+                    eprintln!("serve: rerank failed (falling back to retrieval order): {error:#}");
                 }
                 Err(error)
             }
@@ -273,7 +283,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn posts_the_jina_shape_in_fused_order_without_caching() {
+    async fn posts_the_jina_shape_in_retrieval_order_without_caching() {
         use axum::{
             Json, Router,
             extract::State,
@@ -338,8 +348,14 @@ mod tests {
         .unwrap();
         let documents = vec!["c".to_owned(), "b".to_owned(), "a".to_owned()];
 
-        let first = reranker.rerank("question", &documents).await.unwrap();
-        let second = reranker.rerank("question", &documents).await.unwrap();
+        let first = reranker
+            .rerank("question", &documents, SearchMode::Hybrid)
+            .await
+            .unwrap();
+        let second = reranker
+            .rerank("question", &documents, SearchMode::Sparse)
+            .await
+            .unwrap();
 
         let reranked_texts = |ranked: &[Ranked]| {
             ranked

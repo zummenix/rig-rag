@@ -7,8 +7,18 @@ import sys
 from pathlib import Path
 
 from eval.runner.metrics import K_VALUES
-from eval.runner.results import validate_metric_k
+from eval.runner.results import SEARCH_MODES, validate_metric_k, validate_modes
 from eval.runner.run import RunOptions, run
+
+
+def _parse_modes(raw: str) -> tuple[str, ...]:
+    """A comma-separated subset of the canonical search modes, in canonical order."""
+
+    requested = [part.strip() for part in raw.split(",") if part.strip()]
+    try:
+        return validate_modes(requested)
+    except ValueError as error:
+        raise argparse.ArgumentTypeError(str(error)) from None
 
 
 def _parse_k(raw: str) -> tuple[int, ...]:
@@ -35,6 +45,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="python3 -m eval.runner",
         description="Run the retrieval eval against corpus profiles and write results JSON.",
+        # Reject old/partial spellings: with abbreviation on, `--mode` silently
+        # resolves to `--modes` and would look like a single-mode run.
+        allow_abbrev=False,
     )
     parser.add_argument(
         "--experiment",
@@ -71,6 +84,16 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "comma-separated subset of the contract k grid "
             f"({','.join(map(str, K_VALUES))}); default: all"
+        ),
+    )
+    parser.add_argument(
+        "--modes",
+        type=_parse_modes,
+        default=SEARCH_MODES,
+        metavar="MODES",
+        help=(
+            "comma-separated search modes to sweep, one query per mode "
+            f"(default: {','.join(SEARCH_MODES)} = all)"
         ),
     )
     parser.add_argument(
@@ -122,6 +145,7 @@ def main(argv: list[str] | None = None) -> int:
         force_ingest=args.force_ingest,
         binary=args.bin,
         k_values=k_values,
+        modes=args.modes,
         port=args.port,
         startup_timeout=args.startup_timeout,
     )

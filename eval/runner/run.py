@@ -37,9 +37,15 @@ class RunOptions:
     force_ingest: bool = False
     binary: str | None = None
     k_values: tuple[int, ...] = K_VALUES
+    modes: tuple[str, ...] = results_mod.SEARCH_MODES
     port: int = 0
     startup_timeout: float = 90.0
     hits: list[dict] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        # Canonicalize here too so programmatic callers (tests, experiments)
+        # cannot sweep in a different order than the CLI/report contract.
+        self.modes = results_mod.validate_modes(self.modes)
 
 
 def _git(repo_root: Path, *args: str) -> str:
@@ -111,9 +117,18 @@ def _environment(binary: Path, qdrant_url: str, repo_root: Path) -> dict:
     }
 
 
-def _hit_record(profile: str, question: str, k: int, rank: int, hit: dict, data_root: str) -> dict:
+def _hit_record(
+    profile: str,
+    mode: str,
+    question: str,
+    k: int,
+    rank: int,
+    hit: dict,
+    data_root: str,
+) -> dict:
     return {
         "profile": profile,
+        "mode": mode,
         "question": question,
         "k": k,
         "rank": rank,
@@ -140,35 +155,30 @@ def _timing_summary(values: list[float | None]) -> dict:
     }
 
 
-def _attach_log_metrics(per_question: list[dict], applicable: list[Question], log_path: Path) -> None:
-    """Joins the serve log's per-hash search/rerank lines onto the questions."""
-
-    parsed = serve_log.parse_log(log_path)
-    by_hash = {serve_log.question_hash(question.question): question for question in applicable}
-    if len(by_hash) != len(applicable):
-        raise RuntimeError(
-            f"profile questions are not unique by text in {log_path.parent.name!r}; "
-            "hash correlation would collapse their log records"
-        )
+def _attach_log_metrics(per_question: list[dict], records: dict) -> None:
+    """Joins the serve log's per-(hash, mode) search/rerank lines onto the questions."""
 
     for record in per_question:
-        entry = parsed.get(serve_log.question_hash(record["question"])) or {}
-        search = entry.get("search") or {}
-        rerank = entry.get("rerank") or {}
-        record["timings"]["search_ms"] = search.get("duration_ms")
-        record["timings"]["rerank_ms"] = rerank.get("duration_ms")
-        record["rerank"] = (
-            {
-                "docs": rerank.get("docs"),
-                "results": rerank.get("results"),
-                "tokens": rerank.get("tokens"),
-                "cost": rerank.get("cost"),
-                "cost_rub": rerank.get("cost_rub"),
-                "status": rerank.get("status"),
-            }
-            if rerank
-            else None
-        )
+        question_hash = serve_log.question_hash(record["question"])
+        by_mode = records.get(question_hash) or {}
+        for mode, mode_record in record["modes"].items():
+            entry = by_mode.get(mode) or {}
+            search = entry.get("search") or {}
+            rerank = entry.get("rerank") or {}
+            mode_record["timings"]["search_ms"] = search.get("duration_ms")
+            mode_record["timings"]["rerank_ms"] = rerank.get("duration_ms")
+            mode_record["rerank"] = (
+                {
+                    "docs": rerank.get("docs"),
+                    "results": rerank.get("results"),
+                    "tokens": rerank.get("tokens"),
+                    "cost": rerank.get("cost"),
+                    "cost_rub": rerank.get("cost_rub"),
+                    "status": rerank.get("status"),
+                }
+                if rerank
+                else None
+            )
 
 
 def _sweep(
@@ -178,35 +188,61 @@ def _sweep(
     options: RunOptions,
     log_path: Path,
 ) -> dict:
-    """One uncached query per question at `max(k)`, then prefix truncation.
+    """One uncached query per (question, mode) at `max(k)`, then prefix truncation.
 
+    Every question is measured once per requested mode, in canonical mode order.
     With `[reranker].candidates >= max(k)` (the eval profiles use the default
-    30), every smaller-k ranked list is an exact prefix of the `max(k)` list,
-    so truncating the returned hits is equivalent to querying at each k.
+    30), every smaller-k ranked list is an exact prefix of that mode's `max(k)`
+    list, so truncating the returned hits is equivalent to querying at each k.
+    Only the max-k list's hit locations are stored; the smaller-k lists are
+    derivable prefixes.
     """
 
     query_k = max(options.k_values)
-    per_question: list[dict] = []
+    by_hash = {serve_log.question_hash(question.question): question for question in questions}
+    if len(by_hash) != len(questions):
+        raise RuntimeError(
+            f"profile questions are not unique by text in {log_path.parent.name!r}; "
+            "hash correlation would collapse their log records"
+        )
 
-    for question in questions:
-        hits, elapsed_ms = client.query(question.question, query_k)
-        by_k = {
-            str(k): evaluate_at_k(hits[:k], question, profile.data_root)
-            for k in options.k_values
+    per_question: list[dict] = [
+        {
+            "id": question.id,
+            "question": question.question,
+            "answerable": question.answerable,
+            "gold": results_mod.gold_entry(question),
+            "notes": question.notes,
+            "modes": {},
         }
-        for k in options.k_values:
-            for rank, hit in enumerate(hits[:k], start=1):
-                options.hits.append(
-                    _hit_record(profile.name, question.id, k, rank, hit, profile.data_root)
-                )
+        for question in questions
+    ]
+    by_id = {record["id"]: record for record in per_question}
 
-        per_question.append(
-            {
-                "id": question.id,
-                "question": question.question,
-                "answerable": question.answerable,
-                "gold": results_mod.gold_entry(question),
-                "notes": question.notes,
+    for mode in options.modes:
+        print(f"  mode {mode}: {len(questions)} question(s)")
+        for question in questions:
+            hits, elapsed_ms = client.query(question.question, query_k, mode)
+            by_k = {
+                str(k): evaluate_at_k(hits[:k], question, profile.data_root)
+                for k in options.k_values
+            }
+            for k in options.k_values:
+                if k != query_k:
+                    by_k[str(k)].pop("hits", None)
+                for rank, hit in enumerate(hits[:k], start=1):
+                    options.hits.append(
+                        _hit_record(
+                            profile.name,
+                            mode,
+                            question.id,
+                            k,
+                            rank,
+                            hit,
+                            profile.data_root,
+                        )
+                    )
+            by_id[question.id]["modes"][mode] = {
                 "by_k": by_k,
                 "timings": {
                     "e2e_ms": round(elapsed_ms, 3),
@@ -215,19 +251,36 @@ def _sweep(
                 },
                 "rerank": None,
             }
-        )
 
-    _attach_log_metrics(per_question, questions, log_path)
+    # Read the log only after the sweep: a real `serve` appends each line while
+    # the query runs, so parsing any earlier attaches a stale (usually empty)
+    # snapshot and every timing/rerank rollup comes out null.
+    records = serve_log.parse_log(log_path)
+    _attach_log_metrics(per_question, records)
+
+    modes: dict = {}
+    for mode in options.modes:
+        mode_questions = [record["modes"][mode] for record in per_question]
+        modes[mode] = {
+            "timings": {
+                "search": _timing_summary(
+                    [q["timings"]["search_ms"] for q in mode_questions]
+                ),
+                "rerank": _timing_summary(
+                    [q["timings"]["rerank_ms"] for q in mode_questions]
+                ),
+                "e2e": _timing_summary(
+                    [q["timings"]["e2e_ms"] for q in mode_questions]
+                ),
+            },
+            "rerank": serve_log.rerank_stats(records, mode),
+        }
 
     return {
         "prefix": profile.prefix,
         "data_root": profile.data_root,
         "source_names": sorted(profile.source_names()),
-        "timings": {
-            "search": _timing_summary([q["timings"]["search_ms"] for q in per_question]),
-            "rerank": _timing_summary([q["timings"]["rerank_ms"] for q in per_question]),
-            "e2e": _timing_summary([q["timings"]["e2e_ms"] for q in per_question]),
-        },
+        "modes": modes,
         "questions": per_question,
     }
 
@@ -274,6 +327,7 @@ def run(options: RunOptions) -> Path:
     rig = RigRag(binary, repo_root)
     print(f"rig-rag binary: {binary}")
     print(f"commit: {commit or '<none>'} ({commit_ref or 'no pushed ref'})")
+    print(f"search modes: {', '.join(options.modes)}")
     changed = uncommitted_tracked_changes(repo_root)
     if changed:
         print(
@@ -332,9 +386,7 @@ def run(options: RunOptions) -> Path:
             startup_timeout=options.startup_timeout,
         ) as client:
             result = _sweep(client, applicable, profile, options, log_path)
-        result["collection"] = collection
-        result["rerank"] = serve_log.rerank_stats(log_path)
-        profile_results[profile.name] = result
+        profile_results[profile.name] = {"collection": collection, **result}
 
     qdrant_url = profiles[0].config.get("qdrant", {}).get("url", "")
     results = results_mod.build_results(
@@ -346,6 +398,7 @@ def run(options: RunOptions) -> Path:
         config=config_snapshot,
         environment=_environment(binary, qdrant_url, repo_root),
         profiles=profile_results,
+        modes=options.modes,
         k_values=options.k_values,
     )
 

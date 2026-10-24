@@ -30,10 +30,26 @@ pub enum SearchMode {
     Sparse,
 }
 
+impl SearchMode {
+    /// The lowercase wire name (`"hybrid"`, `"dense"`, `"sparse"`), also used
+    /// in the eval metrics log.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Hybrid => "hybrid",
+            Self::Dense => "dense",
+            Self::Sparse => "sparse",
+        }
+    }
+}
+
 /// One retrieved document chunk, as seen by the model and the UI.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct DocHit {
-    /// Backend similarity score.
+    /// Retrieval score. Its meaning depends on the request's `mode`: an RRF
+    /// score for hybrid, a cosine similarity for dense, and a BM25 score for
+    /// sparse. When a reranker rescores a hit, the score is the reranker's
+    /// relevance for the same query and model, so it is comparable across
+    /// modes; raw scores are only comparable within one mode and one response.
     pub score: f64,
     /// Document path.
     pub path: String,

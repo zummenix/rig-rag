@@ -55,6 +55,27 @@ class ParserTest(unittest.TestCase):
         args = cli.build_parser().parse_args(["--k", "3,20"])
         self.assertEqual(args.k, (3, 20))
 
+    def test_modes_default_to_the_full_canonical_sweep(self):
+        self.assertEqual(
+            cli.build_parser().parse_args([]).modes,
+            ("hybrid", "dense", "sparse"),
+        )
+
+    def test_parser_accepts_a_canonicalized_subset(self):
+        args = cli.build_parser().parse_args(["--modes", "sparse, hybrid"])
+        self.assertEqual(args.modes, ("hybrid", "sparse"))
+        args = cli.build_parser().parse_args(["--modes", "dense"])
+        self.assertEqual(args.modes, ("dense",))
+
+    def test_parser_rejects_unknown_empty_and_duplicate_modes(self):
+        for raw in ("fuzzy", " , ", "dense,dense", "hybrid,sparse,fuzzy"):
+            with quiet_stderr(), self.assertRaises(SystemExit):
+                cli.build_parser().parse_args(["--modes", raw])
+
+    def test_removed_mode_flag_is_rejected(self):
+        with quiet_stderr(), self.assertRaises(SystemExit):
+            cli.build_parser().parse_args(["--mode", "hybrid"])
+
 
 if __name__ == "__main__":
     unittest.main()

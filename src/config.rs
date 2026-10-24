@@ -26,7 +26,8 @@ pub struct Config {
     /// (prefix `docs`, data root `data`), so existing configs are unchanged.
     #[serde(default)]
     pub corpus: CorpusConfig,
-    /// Optional cloud reranker. Absent entirely means fusion-only retrieval.
+    /// Optional cloud reranker. Absent entirely means retrieval without
+    /// reranking.
     pub reranker: Option<RerankerConfig>,
     /// Defaults for the server; CLI flags override each field.
     pub server: Option<ServerConfig>,
@@ -44,7 +45,7 @@ pub struct RerankerConfig {
     pub base_url: String,
     /// Reranker model id, e.g. `rerank-3`.
     pub model: String,
-    /// Fused candidates scored per query before cutting to `k`.
+    /// Retrieved candidates scored per query before cutting to `k`.
     #[serde(default = "default_rerank_candidates")]
     pub candidates: u64,
     /// Per-request timeout. Cloud rerankers can take seconds per call.
@@ -55,7 +56,7 @@ pub struct RerankerConfig {
 /// Environment variable holding the reranker authorization token.
 pub const RERANKER_API_KEY: &str = "RERANKER_API_KEY";
 
-/// Default number of fused candidates sent to the reranker.
+/// Default number of retrieved candidates sent to the reranker.
 pub const DEFAULT_RERANK_CANDIDATES: u64 = 30;
 /// Default per-request reranker timeout.
 pub const DEFAULT_RERANK_TIMEOUT_MS: u64 = 10_000;

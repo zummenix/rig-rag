@@ -4,6 +4,7 @@ use std::time::Duration;
 
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
+use shared::SearchMode;
 
 /// First 16 lowercase hex chars of `sha256(question)`, taken over UTF-8 bytes.
 pub fn question_hash(question: &str) -> String {
@@ -43,22 +44,34 @@ pub struct Usage {
     pub cost_rub: Option<f64>,
 }
 
-/// The `search` line: fused retrieval latency, before any reranking.
-pub fn search_line(question: &str, k: u64, candidates: usize, elapsed: Duration) -> String {
+/// The `search` line: retrieval latency, before any reranking. `mode` records
+/// which vectors produced the sample, so mode-specific runs stay distinguishable
+/// in the serve log.
+pub fn search_line(
+    question: &str,
+    k: u64,
+    mode: SearchMode,
+    candidates: usize,
+    elapsed: Duration,
+) -> String {
     format!(
-        "search q={} k={k} candidates={candidates} duration_ms={}",
+        "search q={} k={k} mode={} candidates={candidates} duration_ms={}",
         question_hash(question),
+        mode.as_str(),
         elapsed.as_millis()
     )
 }
 
-/// The `rerank` line: one per provider call, success or failure.
+/// The `rerank` line: one per provider call, success or failure. `mode` records
+/// which vector selection produced the candidate pool, so the runner can
+/// attribute the paid call to the mode that fed it.
 ///
 /// `error` is the last field and may contain spaces; the runner reads
 /// everything after `error=` as its value.
 #[allow(clippy::too_many_arguments)]
 pub fn rerank_line(
     question: &str,
+    mode: SearchMode,
     model: &str,
     documents: usize,
     results: usize,
@@ -68,8 +81,9 @@ pub fn rerank_line(
     error: Option<&str>,
 ) -> String {
     let mut line = format!(
-        "rerank q={} model={model} docs={documents} results={results} duration_ms={} status={}",
+        "rerank q={} mode={} model={model} docs={documents} results={results} duration_ms={} status={}",
         question_hash(question),
+        mode.as_str(),
         elapsed.as_millis(),
         status.as_str()
     );
@@ -91,14 +105,15 @@ pub fn rerank_line(
 }
 
 /// Writes the `search` line to stderr (captured into `serve-<profile>.log`).
-pub fn log_search(question: &str, k: u64, candidates: usize, elapsed: Duration) {
-    eprintln!("{}", search_line(question, k, candidates, elapsed));
+pub fn log_search(question: &str, k: u64, mode: SearchMode, candidates: usize, elapsed: Duration) {
+    eprintln!("{}", search_line(question, k, mode, candidates, elapsed));
 }
 
 /// Writes the `rerank` line to stderr.
 #[allow(clippy::too_many_arguments)]
 pub fn log_rerank(
     question: &str,
+    mode: SearchMode,
     model: &str,
     documents: usize,
     results: usize,
@@ -110,7 +125,7 @@ pub fn log_rerank(
     eprintln!(
         "{}",
         rerank_line(
-            question, model, documents, results, elapsed, status, usage, error
+            question, mode, model, documents, results, elapsed, status, usage, error
         )
     );
 }
@@ -136,10 +151,20 @@ mod tests {
     }
 
     #[test]
-    fn search_line_has_a_fixed_field_order() {
+    fn search_line_has_a_fixed_field_order_and_names_the_mode() {
         assert_eq!(
-            search_line(QUESTION, 20, 30, Duration::from_millis(412)),
-            "search q=3c8d50cdcb9b43f7 k=20 candidates=30 duration_ms=412"
+            search_line(
+                QUESTION,
+                20,
+                SearchMode::Hybrid,
+                30,
+                Duration::from_millis(412)
+            ),
+            "search q=3c8d50cdcb9b43f7 k=20 mode=hybrid candidates=30 duration_ms=412"
+        );
+        assert!(
+            search_line(QUESTION, 3, SearchMode::Sparse, 3, Duration::from_millis(1))
+                .contains(" mode=sparse ")
         );
     }
 
@@ -153,6 +178,7 @@ mod tests {
         assert_eq!(
             rerank_line(
                 QUESTION,
+                SearchMode::Hybrid,
                 "rerank-3",
                 30,
                 30,
@@ -161,7 +187,7 @@ mod tests {
                 Some(&usage),
                 None
             ),
-            "rerank q=3c8d50cdcb9b43f7 model=rerank-3 docs=30 results=30 duration_ms=1188 status=success tokens=39 cost=0.000351 cost_rub=0.03"
+            "rerank q=3c8d50cdcb9b43f7 mode=hybrid model=rerank-3 docs=30 results=30 duration_ms=1188 status=success tokens=39 cost=0.000351 cost_rub=0.03"
         );
     }
 
@@ -170,6 +196,7 @@ mod tests {
         assert_eq!(
             rerank_line(
                 QUESTION,
+                SearchMode::Hybrid,
                 "rerank-3",
                 30,
                 30,
@@ -178,24 +205,57 @@ mod tests {
                 None,
                 None
             ),
-            "rerank q=3c8d50cdcb9b43f7 model=rerank-3 docs=30 results=30 duration_ms=1188 status=success"
+            "rerank q=3c8d50cdcb9b43f7 mode=hybrid model=rerank-3 docs=30 results=30 duration_ms=1188 status=success"
+        );
+    }
+
+    #[test]
+    fn success_line_changes_only_the_mode_slot() {
+        let line = |mode| {
+            rerank_line(
+                QUESTION,
+                mode,
+                "rerank-3",
+                30,
+                30,
+                Duration::from_millis(1188),
+                RerankStatus::Success,
+                None,
+                None,
+            )
+        };
+        let hybrid = line(SearchMode::Hybrid);
+        assert_eq!(
+            hybrid,
+            "rerank q=3c8d50cdcb9b43f7 mode=hybrid model=rerank-3 docs=30 results=30 duration_ms=1188 status=success"
+        );
+        assert_eq!(
+            line(SearchMode::Dense),
+            hybrid.replace("mode=hybrid", "mode=dense")
+        );
+        assert_eq!(
+            line(SearchMode::Sparse),
+            hybrid.replace("mode=hybrid", "mode=sparse")
         );
     }
 
     #[test]
     fn failure_line_puts_the_error_last() {
-        assert_eq!(
-            rerank_line(
-                QUESTION,
-                "rerank-3",
-                30,
-                0,
-                Duration::from_millis(2001),
-                RerankStatus::Failed,
-                None,
-                Some("rerank endpoint returned 500: oops")
-            ),
-            "rerank q=3c8d50cdcb9b43f7 model=rerank-3 docs=30 results=0 duration_ms=2001 status=failed error=rerank endpoint returned 500: oops"
+        let line = rerank_line(
+            QUESTION,
+            SearchMode::Dense,
+            "rerank-3",
+            30,
+            0,
+            Duration::from_millis(2001),
+            RerankStatus::Failed,
+            None,
+            Some("rerank endpoint returned 500: oops"),
         );
+        assert_eq!(
+            line,
+            "rerank q=3c8d50cdcb9b43f7 mode=dense model=rerank-3 docs=30 results=0 duration_ms=2001 status=failed error=rerank endpoint returned 500: oops"
+        );
+        assert!(line.ends_with("error=rerank endpoint returned 500: oops"));
     }
 }

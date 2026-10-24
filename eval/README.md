@@ -43,6 +43,14 @@ just eval-report baseline               # render the newest run as self-containe
 `just eval-run` needs Qdrant and `OPENROUTER_*` (see Requirements). For the full
 flag lists, run `just eval-run-help` and `just eval-report-help`.
 
+One run sweeps **every search mode by default** (`hybrid`, `dense`, `sparse`) in
+the same ingest/serve pass, so it issues one query per (question, profile) per
+mode: ~3× the rerank calls and wall-clock of a single-mode run (81 queries for
+the current 9 single-project + 18 multi-project question applications, ~6 RUB
+with the deployed reranker). Pass
+`--modes hybrid,dense` (a comma-separated subset) for a cheaper run; the report
+renders whichever modes were recorded.
+
 ## Experiments
 
 | Experiment | Status |
@@ -103,14 +111,17 @@ The harness reuses the main binary; the eval-supporting additions are:
 - **`ingest --report <path>`** writes the JSON document described below; nothing
   extra (timing, tokenizer) is gathered when the flag is absent.
 
-Retrieval knobs stay **hardcoded** (an experiment edits the code/const); eval
-hits the existing `/api/query` endpoint, so there is no HTTP contract change.
-Reranking is the exception: a profile may carry `[reranker]`. The runner always
-starts `serve` with `--log-eval-metrics`, asks **one uncached query per
-question** at `max(k)` (no score cache, no warmup, no repetitions), and joins the server's
-`search`/`rerank` lines to each question by `sha256(question)[:16]` to split
-local search time, paid rerank time, and end-to-end time and to sum provider
-usage/cost.
+Retrieval knobs other than the vector selection stay **hardcoded** (an
+experiment edits the code/const). The per-request knob is `mode`, which the
+runner sends explicitly via `--modes` (a comma-separated subset of
+`hybrid,dense,sparse`; default **all three**) using the existing `/api/query`
+field. Every question is queried **once per mode** at `max(k)`; `results.json`
+and `hits.jsonl` record the mode, and the server's `search`/`rerank` lines name
+it. Reranking is configured per profile through `[reranker]`. The runner always
+starts `serve` with `--log-eval-metrics` (no score cache, no warmup, no
+repetitions) and joins those lines to each (question, mode) by
+`sha256(question)[:16]` + mode to split local search time, paid rerank time, and
+end-to-end time and to sum provider usage/cost.
 
 ## Questions
 
@@ -157,25 +168,40 @@ both corpora, so it is the clean negative a restored no-hit guard must hold.
 Per run under `eval/results/<experiment>/<run>/`:
 
 - `results.json` — the versioned render input (schema in
-  `eval/runner/results.py`). Committed as an artifact. It records a best-effort
-  `commit` and `commit_ref` (empty when git is unavailable or the revision is
-  unpushed), plus an `environment` block whose `binary` is repo-relative with its
-  `binary_sha256`.
-- `hits.jsonl` — one JSON object per returned hit (profile, question, k, rank,
-  score, source, path, lines, chunk text) for offline analysis.
+  `eval/runner/results.py`). Committed as an artifact. It records the measured
+  `modes`, a best-effort `commit` and `commit_ref` (empty when git is unavailable
+  or the revision is unpushed), plus an `environment` block whose `binary` is
+  repo-relative with its `binary_sha256`.
+- `hits.jsonl` — one JSON object per returned hit (profile, mode, question, k,
+  rank, score, source, path, lines, chunk text) for offline analysis.
 - `ingest-<profile>.json` — the Rust `ingest --report` document.
 - `serve-<profile>.log` — the server's captured stdout/stderr.
 
-`results.json` (schema v2) holds, per profile: the collection, the per-question
-`by_k` metrics, per-question `timings`/`rerank` entries, and profile-level
-`timings` for `search`, `rerank`, and `e2e`. The reported `k` set is recorded
-top-level as `k_values` (default `3,7,20`; a run may report a subset, e.g.
-`--k 3,20`). Each question is queried once at `max(k)` and smaller-k metrics are
-exact prefixes of that ranked list (the reranker's candidate pool covers it).
-Percentiles are across questions — one cold sample per question, not repeated
-trials. Across profiles it holds `degradation` (single → multi deltas for recall,
-purity, and MRR at every k) and `summary` (per-profile aggregates at every k,
-including the unanswerable no-hit rate and the timing rollup).
+`results.json` (schema v3) records the measured modes **once** at the top level
+(`modes`, canonical order) and repeats exactly those keys per profile and per
+question:
+
+- per profile: `collection`, `prefix`, `data_root`, `source_names`, a `modes`
+  map (each mode's `timings` for search/rerank/e2e and its `rerank` usage
+  rollup), and the questions;
+- per question: `id`, `question`, `answerable`, `gold`, `notes` once, plus a
+  `modes` map whose entries hold `by_k`, per-question `timings`, and `rerank`;
+- per-mode aggregates under `summary.<profile>.modes.<mode>` (question counts
+  appear once at the profile level), and `degradation.<pair>.modes.<mode>`.
+
+The reported `k` set is recorded top-level as `k_values` (default `3,7,20`; a
+run may report a subset, e.g. `--k 3,20`). Each (question, mode) is queried once
+at `max(k)`; scalar metrics are recorded at every k, and only the max-k `by_k`
+entry keeps the ranked hit-location list (smaller-k lists are exact prefixes, so
+they are not duplicated). Percentiles are across questions — one cold sample per
+question per mode, not repeated trials.
+
+**Scores.** Without a reranker, hybrid scores are RRF, dense are cosine, and
+sparse are BM25, so they are only comparable within a mode. With a `[reranker]`
+configured (the eval profiles use `rerank-3` over 30 candidates), the returned
+score is the reranker's relevance for that hit, so it is comparable across modes
+for the same query — and that reranker also masks retrieval differences, which
+the report's Search modes section makes visible instead of hiding.
 
 ## Ingest report (`ingest --report`)
 
@@ -204,10 +230,16 @@ Notes:
 `eval/report/framework/` turns one run's committed parts into one self-contained
 HTML document (inline CSS + SVG, no scripts, fonts, or network): a retrieval part
 (`results.json`) and one ingestion part per profile (`ingest-<profile>.json`).
-The report covers provenance (commit + ref when available + environment), a
-per-profile summary (recall/purity/MRR × k plus e2e p50/p95), mean recall@k with
-a per-question table per k, a Timing section (local search, paid rerank, and
-end-to-end charts plus a cost rollup), and cross-corpus degradation deltas.
+The report covers provenance (commit + ref when available + environment, modes
+included), a per-profile Summary table with one row per mode (recall/purity/MRR
+× k, no-hit, e2e p50/p95, counts shown once), and — for a v3 run that measured
+more than one mode — a **Search modes** section right after it: mean recall@k
+per mode with `hybrid` as the reference, raw mode values plus Δdense/Δsparse for
+quality and latency, and a per-question cross-mode table at `max(k)`.
+Retrieval-quality per-question tables follow, collapsed per (profile, mode)
+behind `<details>`, then Timing (charts and aggregate/cost tables labelled
+`profile · mode`), and cross-corpus degradation deltas per mode. Everything
+stays self-contained: inline CSS/SVG only, no scripts, fonts, or network.
 
 ```sh
 just eval-report baseline     # newest baseline run → eval/reports/baseline.html
@@ -222,18 +254,24 @@ Both parts are **independently versioned, tested contracts**
 refused, and `eval/report/tests/fixtures/` commits a fixture per shape. A v1
 `results.json` is refused with a clear message: it predates the rerank-cache
 removal, its latency samples mixed warm and cold calls, and it is not
-comparable. The ingestion section leads with `status` and marks a `reused` report as
+comparable. A v2 run predates `SearchMode`, so it renders as a single `unknown`
+series and its provenance says `not recorded (schema v2)`; a v3-vs-v2 comparison
+warns that retrieval cannot be paired until the baseline is re-recorded. The
+ingestion section leads with `status` and marks a `reused` report as
 **cost not measured** (a reused collection gathers no counts or tokens; measure
 real cost with `--force` or a new collection).
 
 ### Comparison (baseline vs candidate)
 
 An experiment can declare a baseline run; the report then leads with a
-**Comparison** section diffing the two runs' ingest cost, retrieval aggregates
-(recall@k, purity@k, MRR@k, search/rerank/e2e p50/p95, no-hit rate), and
-per-question recall/purity at every k. The diff is computed at render time from
-the two committed runs —
-no contract change, and either run stays independently renderable.
+**Comparison** section diffing the two runs' ingest cost and repeating the
+retrieval block for each matched **mode** (recall@k, purity@k, MRR@k,
+search/rerank/e2e p50/p95, no-hit rate, plus per-question recall/purity at every
+k). Series are paired by `(profile, mode)`: a v2 baseline (no recorded mode) or
+a subset-vs-full sweep therefore shows an explicit warning instead of silently
+diffing different arms, while ingest cost is still compared. The diff is
+computed at render time from the two committed runs — no contract change, and
+either run stays independently renderable.
 
 ## Experiment lifecycle
 
@@ -294,9 +332,10 @@ Fixed definitions (unit-tested in `eval/tests/test_metrics.py`):
   threshold) instead of recall/precision/MRR/purity.
 
 Percentiles use linear interpolation between order statistics. Each question is
-queried exactly once, uncached, at `max(k)`; correctness at smaller k is computed
-from the returned list's prefix, and timings are split by the server's
-`search`/`rerank` lines. Percentiles are across questions, not repeated trials.
+queried exactly once per mode, uncached, at `max(k)`; correctness at smaller k is
+computed from that mode's returned list's prefix, and timings are split by the
+server's mode-tagged `search`/`rerank` lines. Percentiles are across questions,
+not repeated trials.
 
 Qualitative observations from the first full baseline run (both profiles) worth
 keeping:
@@ -317,13 +356,25 @@ keeping:
   token counts are approximations — fine for relative/cost ballparks, not exact
   embedding-cost math.
 - **No calibrated no-hit guard.** The dense-only `THRESHOLD = 0.5` was poorly
-  calibrated (most off-topic questions cleared it), and the adopted hybrid path
-  uses a `0.0` RRF floor; dense and sparse floors are also `0.0`, so every query
-  returns `k` hits and `no_hit` is 0 by construction.
+  calibrated (most off-topic questions cleared it), so retrieval currently sets
+  no score threshold at all: Qdrant's `score_threshold` is an active filter, and
+  a `0.0` value would silently drop negative cosine similarities in dense mode.
+  Every query therefore returns up to `k` hits and `no_hit` is 0 by construction.
   `unanswerable-made-up-entity` exists to certify a future score-based guard;
-  until then its top RRF score is not a relevance signal.
+  until then its top RRF score is not a relevance signal. A calibrated cutoff
+  must be optional, applied only when `Some`, and calibrated per mode.
 - **Profile drift.** Pinned SHAs freeze the corpora; refreshing a pin is itself a
   decision (and possibly an experiment).
+- **Reranking masks mode differences.** The eval profiles set `[reranker]` with
+  30 candidates (the deployed pipeline), so recall/purity/MRR measure the
+  pipeline *after* reranking: a mode that retrieves a gold chunk into the
+  candidate pool can still rank it high, flattening cross-mode retrieval
+  differences. Scores are comparable across modes because they all come from the
+  same reranker. To isolate the raw arms, run a profile without `[reranker]`
+  (then scores are per-mode and not comparable).
+- **Candidate pool ≥ max(k).** Prefix truncation is equivalent to querying at
+  each k only while `[reranker].candidates >= max(k)`; lowering it below
+  `max(k)` truncates the pool itself and invalidates that equivalence.
 - **Latency noise.** Host/Qdrant warmth and provider load affect p95; every
   sample is a cold query, so record the environment with the run.
 - **Result size.** `hits.jsonl` + `results.json` per run can grow; the raw dumps
