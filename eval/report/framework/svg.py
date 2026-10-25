@@ -19,6 +19,10 @@ PALETTE = {
     "p95": "#b45309",  # amber
     "positive": "#15803d",  # green
     "negative": "#b91c1c",  # red
+    "mode_hybrid": "#2563eb",  # blue (also the single-profile color)
+    "mode_dense": "#0f766e",  # teal (also p50)
+    "mode_sparse": "#b45309",  # amber (also p95)
+    "mode_unknown": "#6b7280",  # muted grey
     "grid": "#e5e7eb",
     "axis": "#9ca3af",
     "ink": "#111827",

@@ -10,8 +10,8 @@ use crate::config::Config;
 use crate::retrieval;
 use crate::serve::chat::PREAMBLE;
 use crate::serve::state::{ChatStream, Completer, Retriever};
-use crate::store::{SearchMode, Store};
-use shared::{ChatEvent, DocHit, Msg, Role};
+use crate::store::Store;
+use shared::{ChatEvent, DocHit, Msg, Role, SearchMode};
 
 /// [`Retriever`] backed by the active Qdrant collection.
 pub struct QdrantRetriever {

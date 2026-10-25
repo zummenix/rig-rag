@@ -29,7 +29,7 @@ pub struct AppState {
 /// wraps Qdrant, tests inject a mock.
 pub trait Retriever: Send + Sync {
     /// Returns the `k` most similar chunks, best first, searching the vectors
-    /// selected by `mode`. Each mode applies its own internal score floor.
+    /// selected by `mode`.
     fn retrieve<'a>(
         &'a self,
         question: &'a str,

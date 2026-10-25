@@ -57,14 +57,21 @@ class QueryClient:
             return False
         return status == 200
 
-    def query(self, question: str, k: int) -> tuple[list[dict], float]:
-        """Runs one query; returns `(hits, elapsed_ms)`.
+    def query(
+        self, question: str, k: int, mode: str
+    ) -> tuple[list[dict], float]:
+        """Runs one query in `mode`; returns `(hits, elapsed_ms)`.
 
-        `elapsed_ms` is the wall-clock time for the HTTP exchange and response
-        read (JSON parsing excluded), which is what the latency sweep records.
+        `mode` is required and sent explicitly so every request records the
+        vector selection rather than relying on the server's default (a sweep
+        that silently defaulted would mislabel a whole arm). `elapsed_ms` is the
+        wall-clock time for the HTTP exchange and response read (JSON parsing
+        excluded), which is what the latency sweep records.
         """
 
-        payload = json.dumps({"question": question, "k": k}).encode("utf-8")
+        payload = json.dumps(
+            {"question": question, "k": k, "mode": mode}
+        ).encode("utf-8")
         started = time.perf_counter()
         status, data = self._send("POST", "/api/query", payload)
         elapsed_ms = (time.perf_counter() - started) * 1000.0

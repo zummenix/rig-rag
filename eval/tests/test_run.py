@@ -160,20 +160,30 @@ class FakeClient:
     def __init__(self, hits: list[dict], elapsed_ms: float = 12.5) -> None:
         self.hits = hits
         self.elapsed_ms = elapsed_ms
-        self.calls: list[tuple[str, int]] = []
+        self.calls: list[tuple[str, int, str]] = []
 
-    def query(self, question: str, k: int) -> tuple[list[dict], float]:
-        self.calls.append((question, k))
+    def query(self, question: str, k: int, mode: str) -> tuple[list[dict], float]:
+        self.calls.append((question, k, mode))
         return list(self.hits), self.elapsed_ms
 
 
-def write_serve_log(path: Path, question: str, *, search_ms: int | None = 412, rerank: str | None = None) -> None:
+def write_serve_log(
+    path: Path,
+    question: str,
+    *,
+    modes: tuple[str, ...] = ("hybrid", "dense", "sparse"),
+    search_ms: int | None = 412,
+    rerank: str | None = None,
+) -> None:
     q = serve_log.question_hash(question)
     lines = []
-    if search_ms is not None:
-        lines.append(f"search q={q} k=20 candidates=30 duration_ms={search_ms}")
-    if rerank is not None:
-        lines.append(rerank.replace("{q}", q))
+    for mode in modes:
+        if search_ms is not None:
+            lines.append(
+                f"search q={q} k=20 mode={mode} candidates=30 duration_ms={search_ms}"
+            )
+        if rerank is not None:
+            lines.append(rerank.replace("{q}", q).replace("{mode}", mode))
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
@@ -183,64 +193,135 @@ class SweepTest(unittest.TestCase):
             id="q1", question=text, applies_to=("single-project",), gold=()
         )
 
-    def run_sweep(self, tmp: Path, questions: list[Question], rerank: str | None = None):
+    def run_sweep(
+        self,
+        tmp: Path,
+        questions: list[Question],
+        rerank: str | None = None,
+        modes: tuple[str, ...] = ("hybrid", "dense", "sparse"),
+    ):
         path = tmp / "serve.log"
-        write_serve_log(path, questions[0].question, rerank=rerank)
+        write_serve_log(path, questions[0].question, modes=modes, rerank=rerank)
         client = FakeClient([hit(0), hit(1), hit(2), hit(3), hit(4)])
-        options = RunOptions(repo_root=tmp, k_values=(3, 7))
+        options = RunOptions(repo_root=tmp, k_values=(3, 7), modes=modes)
         result = _sweep(client, questions, profile("single-project"), options, path)
         return client, result, options
 
-    def test_one_query_per_question_at_max_k(self):
+    def test_one_query_per_question_per_mode_at_max_k(self):
         with tempfile.TemporaryDirectory() as tmp:
             client, result, _ = self.run_sweep(Path(tmp), [self.question()])
 
-        self.assertEqual(client.calls, [("What is it?", 7)])
-        self.assertEqual(result["questions"][0]["by_k"]["3"]["hits_returned"], 3)
-        self.assertEqual(result["questions"][0]["by_k"]["7"]["hits_returned"], 5)
+        self.assertEqual(
+            client.calls,
+            [
+                ("What is it?", 7, "hybrid"),
+                ("What is it?", 7, "dense"),
+                ("What is it?", 7, "sparse"),
+            ],
+        )
+        self.assertEqual(set(result["modes"]), {"hybrid", "dense", "sparse"})
+        question = result["questions"][0]
+        self.assertEqual(set(question["modes"]), {"hybrid", "dense", "sparse"})
+        for mode in ("hybrid", "dense", "sparse"):
+            self.assertEqual(
+                question["modes"][mode]["by_k"]["3"]["hits_returned"], 3
+            )
+            self.assertEqual(
+                question["modes"][mode]["by_k"]["7"]["hits_returned"], 5
+            )
+        self.assertNotIn("by_k", question)
 
-    def test_prefix_truncation_keeps_the_hit_records_per_k(self):
+    def test_sweep_sends_the_requested_modes_and_records_them(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            client, result, options = self.run_sweep(
+                Path(tmp), [self.question()], modes=("dense", "sparse")
+            )
+
+        self.assertEqual(
+            client.calls,
+            [("What is it?", 7, "dense"), ("What is it?", 7, "sparse")],
+        )
+        self.assertEqual(set(result["modes"]), {"dense", "sparse"})
+        self.assertEqual({record["mode"] for record in options.hits}, {"dense", "sparse"})
+
+    def test_prefix_truncation_keeps_the_hit_records_per_k_and_mode(self):
         with tempfile.TemporaryDirectory() as tmp:
             _, result, options = self.run_sweep(Path(tmp), [self.question()])
 
         counts = {}
         for record in options.hits:
             counts[record["k"]] = counts.get(record["k"], 0) + 1
-        self.assertEqual(counts, {3: 3, 7: 5})
+        # Three modes × (3 hits at k=3, 5 hits at k=7).
+        self.assertEqual(counts, {3: 9, 7: 15})
         self.assertEqual(result["questions"][0]["answerable"], False)
 
-    def test_hash_join_attaches_search_and_rerank_timings(self):
+    def test_only_the_max_k_entry_keeps_the_hit_location_list(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            _, result, _ = self.run_sweep(Path(tmp), [self.question()])
+
+        for mode_record in result["questions"][0]["modes"].values():
+            self.assertNotIn("hits", mode_record["by_k"]["3"])
+            self.assertIsInstance(mode_record["by_k"]["7"]["hits"], list)
+            self.assertEqual(len(mode_record["by_k"]["7"]["hits"]), 5)
+
+    def test_hash_join_attaches_search_and_rerank_timings_per_mode(self):
         rerank = (
-            "rerank q={q} model=rerank-3 docs=5 results=5 duration_ms=1188 "
+            "rerank q={q} mode={mode} model=rerank-3 docs=5 results=5 duration_ms=1188 "
             "status=success tokens=39 cost=0.000351 cost_rub=0.03"
         )
         with tempfile.TemporaryDirectory() as tmp:
             _, result, _ = self.run_sweep(Path(tmp), [self.question()], rerank=rerank)
 
-        timings = result["questions"][0]["timings"]
-        self.assertEqual(timings["search_ms"], 412)
-        self.assertEqual(timings["rerank_ms"], 1188)
-        self.assertEqual(timings["e2e_ms"], 12.5)
+        question = result["questions"][0]
+        for mode in ("hybrid", "dense", "sparse"):
+            timings = question["modes"][mode]["timings"]
+            self.assertEqual(timings["search_ms"], 412)
+            self.assertEqual(timings["rerank_ms"], 1188)
+            self.assertEqual(timings["e2e_ms"], 12.5)
+            rerank_entry = question["modes"][mode]["rerank"]
+            self.assertEqual(rerank_entry["status"], "success")
+            self.assertEqual(rerank_entry["docs"], 5)
+            self.assertEqual(rerank_entry["tokens"], 39)
 
-        rerank_entry = result["questions"][0]["rerank"]
-        self.assertEqual(rerank_entry["status"], "success")
-        self.assertEqual(rerank_entry["docs"], 5)
-        self.assertEqual(rerank_entry["tokens"], 39)
+            profile_timings = result["modes"][mode]["timings"]
+            self.assertEqual(profile_timings["search"]["p50_ms"], 412)
+            self.assertEqual(profile_timings["rerank"]["p50_ms"], 1188)
+            self.assertEqual(profile_timings["e2e"]["p50_ms"], 12.5)
+            self.assertEqual(result["modes"][mode]["rerank"]["calls"], 1)
 
-        profile_timings = result["timings"]
-        self.assertEqual(profile_timings["search"]["p50_ms"], 412)
-        self.assertEqual(profile_timings["rerank"]["p50_ms"], 1188)
-        self.assertEqual(profile_timings["e2e"]["p50_ms"], 12.5)
+    def test_log_line_is_attached_only_to_its_mode(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "serve.log"
+            question = self.question()
+            q = serve_log.question_hash(question.question)
+            path.write_text(
+                f"search q={q} k=20 mode=hybrid candidates=30 duration_ms=412\n",
+                encoding="utf-8",
+            )
+            client = FakeClient([hit(0)])
+            options = RunOptions(
+                repo_root=Path(tmp), k_values=(3,), modes=("hybrid", "dense")
+            )
+            result = _sweep(
+                client, [question], profile("single-project"), options, path
+            )
+
+        modes = result["questions"][0]["modes"]
+        self.assertEqual(modes["hybrid"]["timings"]["search_ms"], 412)
+        self.assertIsNone(modes["dense"]["timings"]["search_ms"])
+        self.assertEqual(result["modes"]["dense"]["rerank"]["calls"], 0)
 
     def test_failed_rerank_is_recorded_without_changing_quality(self):
         rerank = (
-            "rerank q={q} model=rerank-3 docs=5 results=0 duration_ms=2001 "
+            "rerank q={q} mode={mode} model=rerank-3 docs=5 results=0 duration_ms=2001 "
             "status=failed error=rerank endpoint returned 500: boom"
         )
         with tempfile.TemporaryDirectory() as tmp:
-            _, result, _ = self.run_sweep(Path(tmp), [self.question()], rerank=rerank)
+            _, result, _ = self.run_sweep(
+                Path(tmp), [self.question()], rerank=rerank, modes=("hybrid",)
+            )
 
-        question = result["questions"][0]
+        question = result["questions"][0]["modes"]["hybrid"]
         self.assertEqual(question["rerank"]["status"], "failed")
         self.assertEqual(question["rerank"]["results"], 0)
         self.assertEqual(question["timings"]["rerank_ms"], 2001)
@@ -248,12 +329,55 @@ class SweepTest(unittest.TestCase):
 
     def test_missing_rerank_line_leaves_rerank_none(self):
         with tempfile.TemporaryDirectory() as tmp:
-            _, result, _ = self.run_sweep(Path(tmp), [self.question()], rerank=None)
+            _, result, _ = self.run_sweep(
+                Path(tmp), [self.question()], rerank=None, modes=("hybrid",)
+            )
 
-        self.assertEqual(result["questions"][0]["timings"]["search_ms"], 412)
-        self.assertIsNone(result["questions"][0]["timings"]["rerank_ms"])
-        self.assertIsNone(result["questions"][0]["rerank"])
-        self.assertEqual(result["timings"]["rerank"]["samples_ms"], [])
+        mode_record = result["questions"][0]["modes"]["hybrid"]
+        self.assertEqual(mode_record["timings"]["search_ms"], 412)
+        self.assertIsNone(mode_record["timings"]["rerank_ms"])
+        self.assertIsNone(mode_record["rerank"])
+        self.assertEqual(result["modes"]["hybrid"]["timings"]["rerank"]["samples_ms"], [])
+
+    def test_log_is_parsed_after_the_queries_not_before(self):
+        # A real `serve` appends its search/rerank lines while each query runs.
+        # Parsing the log before the sweep attaches an empty snapshot and leaves
+        # every timing and rerank rollup null, which the pre-written fixtures in
+        # the other tests cannot detect.
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            path = tmp / "serve.log"
+            path.write_text("", encoding="utf-8")
+            question = self.question()
+            q = serve_log.question_hash(question.question)
+
+            class AppendingClient:
+                def query(self, text, k, mode):
+                    with path.open("a", encoding="utf-8") as handle:
+                        handle.write(
+                            f"search q={q} k=20 mode={mode} candidates=30 duration_ms=412\n"
+                        )
+                        handle.write(
+                            f"rerank q={q} mode={mode} model=rerank-3 docs=5 "
+                            "results=5 duration_ms=1188 status=success tokens=39 "
+                            "cost=0.000351 cost_rub=0.03\n"
+                        )
+                    return [hit(0), hit(1), hit(2), hit(3), hit(4)], 12.5
+
+            options = RunOptions(
+                repo_root=tmp, k_values=(3, 7), modes=("hybrid", "dense", "sparse")
+            )
+            result = _sweep(
+                AppendingClient(), [question], profile("single-project"), options, path
+            )
+            log_text = path.read_text(encoding="utf-8")
+
+        self.assertEqual(log_text.count("search "), 3)
+        for mode in ("hybrid", "dense", "sparse"):
+            timings = result["questions"][0]["modes"][mode]["timings"]
+            self.assertEqual(timings["search_ms"], 412)
+            self.assertEqual(timings["rerank_ms"], 1188)
+            self.assertEqual(result["modes"][mode]["rerank"]["calls"], 1)
 
     def test_duplicate_question_text_is_rejected(self):
         with tempfile.TemporaryDirectory() as tmp:

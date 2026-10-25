@@ -1,15 +1,17 @@
 """Baseline-vs-candidate deltas for the report's comparison section.
 
-Pure functions over loaded documents: they extract the metrics a diff needs and
-compute `candidate - baseline` (and percent). They never load files or render
-HTML. A missing or unmeasured value stays `None` all the way through, so the
-renderer prints an em dash instead of inventing a zero.
+Pure functions over loaded documents and their `(profile, mode)` series: they
+extract the metrics a diff needs, pair series by `(profile, mode)`, and compute
+`candidate - baseline` (and percent). They never load files or render HTML. A
+missing or unmeasured value stays `None` all the way through, so the renderer
+prints an em dash instead of inventing a zero.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 
+from eval.report.framework import loader
 from eval.report.framework.ingest import cost_measured, profile_label
 
 
@@ -105,11 +107,11 @@ def ingest_metrics(document: dict | None) -> dict[str, float | None]:
 
 
 def retrieval_metrics(
-    results: dict, profile: str, k_values: tuple[int, ...]
+    entry: dict, k_values: tuple[int, ...]
 ) -> dict[str, float | None]:
-    """One profile's aggregate retrieval metrics, keyed for the comparison table."""
+    """One (profile, mode) series entry's aggregate metrics, keyed for the diff table."""
 
-    summary = (results.get("summary") or {}).get(profile) or {}
+    summary = entry.get("summary") or {}
     mean_recall = summary.get("mean_recall") or {}
     timings = summary.get("timings") or {}
     metrics: dict[str, float | None] = {}
@@ -128,20 +130,55 @@ def retrieval_metrics(
 
 
 def question_metrics(
-    results: dict, profile: str, k_values: tuple[int, ...]
+    entry: dict, k_values: tuple[int, ...]
 ) -> dict[str, dict]:
-    """Per-question recall/purity/MRR at every k, keyed by question id."""
+    """Per-question recall/purity at every k for one series entry, keyed by id."""
 
     out: dict[str, dict] = {}
-    profile_document = (results.get("profiles") or {}).get(profile) or {}
-    for question in profile_document.get("questions", []):
-        entry: dict = {"answerable": question.get("answerable", True)}
+    for question in entry.get("questions") or []:
+        metrics: dict = {"answerable": question.get("answerable", True)}
         for k in k_values:
             by_k = (question.get("by_k") or {}).get(str(k)) or {}
-            entry[f"recall@{k}"] = by_k.get("recall")
-            entry[f"purity@{k}"] = by_k.get("purity")
-        out[question.get("id", "")] = entry
+            metrics[f"recall@{k}"] = by_k.get("recall")
+            metrics[f"purity@{k}"] = by_k.get("purity")
+        out[question.get("id", "")] = metrics
     return out
+
+
+def _key_order(key: tuple[str, str]) -> tuple[int, int, str, str]:
+    profile, mode = key
+    mode_rank = (
+        loader.SEARCH_MODES.index(mode) if mode in loader.SEARCH_MODES else len(loader.SEARCH_MODES)
+    )
+    return loader.profile_rank(profile), mode_rank, profile, mode
+
+
+def pair_series(
+    candidate_results: dict | None, baseline_results: dict | None
+) -> tuple[list[tuple[str, str, dict, dict]], list[tuple[str, str]], list[tuple[str, str]]]:
+    """Pairs series by `(profile, mode)`.
+
+    Returns `(pairs, only_candidate, only_baseline)`. A v2 document contributes a
+    single `unknown` series per profile, so v2↔v2 pairs normally and a v3
+    candidate against a v2 baseline yields no retrieval pairs (the comparison
+    section explains why instead of silently diffing different arms).
+    """
+
+    candidate = loader.series(candidate_results) if candidate_results is not None else []
+    baseline = loader.series(baseline_results) if baseline_results is not None else []
+    baseline_by_key = {(entry["profile"], entry["mode"]): entry for entry in baseline}
+    candidate_keys = {(entry["profile"], entry["mode"]) for entry in candidate}
+
+    pairs: list[tuple[str, str, dict, dict]] = []
+    for entry in candidate:
+        key = (entry["profile"], entry["mode"])
+        base_entry = baseline_by_key.get(key)
+        if base_entry is not None:
+            pairs.append((key[0], key[1], entry, base_entry))
+
+    only_candidate = sorted(candidate_keys - set(baseline_by_key), key=_key_order)
+    only_baseline = sorted(set(baseline_by_key) - candidate_keys, key=_key_order)
+    return pairs, only_candidate, only_baseline
 
 
 def delta(baseline: object, candidate: object) -> float | None:

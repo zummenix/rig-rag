@@ -1,10 +1,11 @@
 use anyhow::Result;
 
-use crate::store::{SearchMode, Store};
-use shared::DocHit;
+use crate::store::Store;
+use shared::{DocHit, SearchMode};
 
 /// Retrieves the chunks most similar to `question`, most similar first, using
-/// the vectors selected by `mode` ([`SearchMode::Hybrid`] by default).
+/// the vectors selected by `mode`; callers normally pass
+/// [`SearchMode::Hybrid`].
 ///
 /// Backs the web server's retrieval and chat endpoints so both apply the same
 /// search semantics.

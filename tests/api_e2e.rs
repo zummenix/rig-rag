@@ -12,17 +12,19 @@ use futures::{StreamExt, future::BoxFuture};
 use reqwest::StatusCode;
 use rig_rag::serve::{
     self,
-    mock::{MockCompleter, MockRetriever, mock_answer, mock_docs},
+    mock::{MockCompleter, MockRetriever, mock_answer},
     state::{AppState, Retriever},
 };
 use shared::{ChatEvent, ChatRequest, DocHit, Msg, QueryRequest, Role, SearchMode};
 use tokio::net::TcpListener;
 
-/// A [`Retriever`] that serves the mock hits and records the `mode` of every
-/// call, so tests can assert the request body reached retrieval unchanged.
+/// A [`Retriever`] that records the `mode` of every call and delegates the
+/// hits to [`MockRetriever`], so tests can assert the request body reached
+/// retrieval unchanged without duplicating the mock's hit selection.
 #[derive(Clone, Default)]
 struct RecordingRetriever {
     modes: Arc<std::sync::Mutex<Vec<SearchMode>>>,
+    inner: MockRetriever,
 }
 
 impl RecordingRetriever {
@@ -35,13 +37,12 @@ impl RecordingRetriever {
 impl Retriever for RecordingRetriever {
     fn retrieve<'a>(
         &'a self,
-        _question: &'a str,
+        question: &'a str,
         k: u64,
         mode: SearchMode,
     ) -> BoxFuture<'a, anyhow::Result<Vec<DocHit>>> {
         self.modes.lock().unwrap().push(mode);
-        // Same hit selection as `MockRetriever`: take the first `k`.
-        Box::pin(async move { Ok(mock_docs().into_iter().take(k as usize).collect()) })
+        self.inner.retrieve(question, k, mode)
     }
 }
 
