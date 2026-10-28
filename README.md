@@ -73,8 +73,8 @@ Optional cloud reranking (omit the section for retrieval without reranking):
 # API root including the version segment; the app posts to {base_url}/rerank.
 base_url = "https://api.jina.ai/v1"
 model = "jina-reranker-v2-base-multilingual"
-# Retrieved candidates scored before cutting to k (default 30).
-candidates = 30
+# Retrieved candidates scored before cutting to k (default 60).
+candidates = 60
 # Per-request timeout; cloud rerankers can take seconds (default 10000).
 timeout_ms = 10000
 ```

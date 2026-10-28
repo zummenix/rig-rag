@@ -33,12 +33,10 @@ const SPARSE_VECTOR_NAME: &str = "sparse";
 const SPARSE_MODEL_NAME: &str = "Qdrant/bm25";
 /// Candidates pulled from each prefetch before fusion.
 const HYBRID_PREFETCH_LIMIT: u64 = 50;
-/// Reciprocal Rank Fusion parameters: the rank constant and the per-prefetch
-/// weights in prefetch order (`[sparse, dense]`). Higher weight gives more
-/// influence on the final ranking.
+/// Reciprocal Rank Fusion rank constant. Both prefetches carry equal weight
+/// (Qdrant's default when no weights are supplied), so neither retriever's
+/// head systematically buries the other's deeper candidates.
 const RRF_K: u32 = 2;
-const SPARSE_WEIGHT: f32 = 2.0;
-const DENSE_WEIGHT: f32 = 1.0;
 
 /// Builds the Qdrant request for `mode`, embedding `question` through `embed`
 /// only for modes that search the dense vector.
@@ -81,7 +79,7 @@ async fn query_request(
                 .add_prefetch(dense_prefetch)
                 .query(Query::new_rrf(Rrf {
                     k: Some(RRF_K),
-                    weights: vec![SPARSE_WEIGHT, DENSE_WEIGHT],
+                    ..Default::default()
                 }))
         }
         SearchMode::Dense => {
@@ -456,7 +454,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn hybrid_request_prefetches_sparse_then_dense_with_rrf_weights() {
+    async fn hybrid_request_prefetches_sparse_then_dense_with_equal_rrf_weights() {
         let request = query_request(
             "docs-test",
             SearchMode::Hybrid,
@@ -471,7 +469,7 @@ mod tests {
         assert_eq!(request.score_threshold, None);
         assert_eq!(request.prefetch.len(), 2);
 
-        // The weights are positional: sparse must stay first.
+        // Equal weights mean prefetch order no longer biases the fusion.
         assert_eq!(
             request.prefetch[0].using.as_deref(),
             Some(SPARSE_VECTOR_NAME)
@@ -511,7 +509,10 @@ mod tests {
         {
             Some(QueryVariant::Rrf(rrf)) => {
                 assert_eq!(rrf.k, Some(RRF_K));
-                assert_eq!(rrf.weights, vec![SPARSE_WEIGHT, DENSE_WEIGHT]);
+                assert!(
+                    rrf.weights.is_empty(),
+                    "equal weights are Qdrant's default and must not be set"
+                );
             }
             _ => panic!("hybrid request must fuse with RRF"),
         }

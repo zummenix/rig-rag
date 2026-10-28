@@ -56,8 +56,10 @@ pub struct RerankerConfig {
 /// Environment variable holding the reranker authorization token.
 pub const RERANKER_API_KEY: &str = "RERANKER_API_KEY";
 
-/// Default number of retrieved candidates sent to the reranker.
-pub const DEFAULT_RERANK_CANDIDATES: u64 = 30;
+/// Default number of retrieved candidates sent to the reranker. The fused
+/// ranking is rank-biased, so the pool is deliberately deeper than the default
+/// `k` to give the reranker a chance at candidates a single retriever ranks low.
+pub const DEFAULT_RERANK_CANDIDATES: u64 = 60;
 /// Default per-request reranker timeout.
 pub const DEFAULT_RERANK_TIMEOUT_MS: u64 = 10_000;
 

@@ -15,5 +15,5 @@ active = "eval-multi-project-bge-small-en-v1-5-a3ea89d89f3c"
 [reranker]
 base_url = "https://api.aitunnel.ru/v1"
 model = "rerank-3"
-candidates = 30
+candidates = 60
 timeout_ms = 10000
