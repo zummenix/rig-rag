@@ -46,7 +46,7 @@ flag lists, run `just eval-run-help` and `just eval-report-help`.
 One run sweeps **every search mode by default** (`hybrid`, `dense`, `sparse`) in
 the same ingest/serve pass, so it issues one query per (question, profile) per
 mode: ~3× the rerank calls and wall-clock of a single-mode run (81 queries for
-the current 9 single-project + 18 multi-project question applications, ~6 RUB
+the current 9 single-project + 18 multi-project question applications, ~10 RUB
 with the deployed reranker). Pass
 `--modes hybrid,dense` (a comma-separated subset) for a cheaper run; the report
 renders whichever modes were recorded.
@@ -60,6 +60,7 @@ renders whichever modes were recorded.
 | [Hybrid dense + BM25 retrieval](experiments/hybrid_search.md) | **Adopted** — fusing a server-side BM25 sparse vector with the dense BGE vector by weighted RRF lifted multi-project `recall@20` 0.333 → 0.833 (`recall@3` 0.167 → 0.500) with single-project unchanged, at ~1.5 ms p50 and ~2× insert; the negative-control `no_hit` falls to 0 and the weights were tuned on the suite (both recorded as caveats) |
 | [Cross-encoder reranking](experiments/reranking.md) | **Rejected** (not adopted) — a 151 MB Jina turbo reranker over the top 50 fused candidates promoted a few golds into the top 20 but regressed multi-project `recall@7`/`recall@10`, left `recall@20` flat, and cost ~1.7 s per query (~180–190×); the code was reverted |
 | [Cloud reranking](experiments/cloud_reranking.md) | **Measured — recommended for adoption** — a cloud `rerank-3` pass over the top 30 fused candidates lifted single-project `recall@7` 0.250 → 0.500 and multi-project `recall@7`/`recall@10` 0.313/0.375 → 0.375/0.500 (`MRR@7` 0.188 → 0.294, purity@7 0.866 → 0.929); cold p50 ~1.1 s, warm cache-hit p50 ~10 ms, 30 calls cost 2.17 RUB |
+| [Widen the hybrid candidate pool](experiments/hybrid_candidate_pool.md) | **Adopted** — equal RRF weights and a 60-document rerank pool lifted hybrid `recall@7` 0.500 → 0.750 (single) and 0.375 → 0.625 (multi), `recall@20` 0.500 → 0.875/0.750, with no answerable hybrid regression, at ~1.8× rerank cost and +11–31% cold p50; the four remaining misses lie outside both retrievers' top 50 |
 
 Each experiment is an `eval/experiments/<id>.md` record plus a run under
 `eval/results/<id>/`; add a row here when a new one lands. The `baseline` id is
@@ -198,7 +199,7 @@ question per mode, not repeated trials.
 
 **Scores.** Without a reranker, hybrid scores are RRF, dense are cosine, and
 sparse are BM25, so they are only comparable within a mode. With a `[reranker]`
-configured (the eval profiles use `rerank-3` over 30 candidates), the returned
+configured (the eval profiles use `rerank-3` over 60 candidates), the returned
 score is the reranker's relevance for that hit, so it is comparable across modes
 for the same query — and that reranker also masks retrieval differences, which
 the report's Search modes section makes visible instead of hiding.

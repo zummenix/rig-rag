@@ -11,9 +11,10 @@ moving backward, at roughly twice the reranked documents per query. Falsified by
 no recall movement, by any answerable question regressing, or by a rerank-cost
 and latency increase that the quality gain does not justify.
 
-**Status:** measured, pending decision — equal weights and the 60-document pool
-lifted hybrid `recall@7` from 0.500 to 0.750 on single-project and 0.375 to 0.625
-on multi-project, with no answerable hybrid regression; see [Results](#results).
+**Status:** adopted — equal weights and the 60-document pool lifted hybrid
+`recall@7` from 0.500 to 0.750 on single-project and 0.375 to 0.625 on
+multi-project, with no answerable hybrid regression; see
+[Results](#results) and [Decision](#decision).
 
 ## Controlled change
 
@@ -93,7 +94,7 @@ arm had zero rerank failures.
 ### Cost
 
 Across the six (profile, mode) arms the run scored 4,740 reranked documents for
-9.79 RUB versus 2,955 documents for 5.33 RUB in the baseline (**1.84×**). The
+9.79 RUB versus 2,381 documents for 5.33 RUB in the baseline (**1.84×**). The
 hybrid pair alone is 1,609 vs 810 documents and 3.51 vs 1.92 RUB (**1.83×**).
 Hybrid cold p50 rose by 31% (single) and 11% (multi); p95 by 11–12% on both.
 
@@ -101,19 +102,19 @@ Hybrid cold p50 rose by 31% (single) and 11% (multi); p95 by 11–12% on both.
 
 - **Effect size.** The movement is large and deterministic: hybrid `recall@7`
   +0.250 on both profiles, `recall@20` +0.250 to +0.375, and MRR@7 +0.083 to
-  +0.104. The four questions that flipped all had their golds at first-stage
-  ranks 21–30 (dense) or 21–29 (sparse), exactly the depth the old pool
-  truncated. The reranker did the rest, promoting them to k=3.
+  +0.104. The four questions that entered the top 3 all had their golds at
+  first-stage ranks 21–30 (dense) or 21–29 (sparse), exactly the depth the old
+  pool truncated. The reranker did the rest, promoting them to k=3.
 - **Where it comes from.** Equal weights stop the sparse head from burying
   dense-only deep hits (`jj-split-work` dense rank 26, `jj-conflict-resolution`
   dense rank 23). The 60-document pool admits the sparse-side deep hits
   (`jj-publish-remote` sparse rank 28, `qdrant-archive-collection` sparse rank
   21) and `jj-config-set-user` (sparse rank 29). Nothing about the corpus,
   embedding, or reranker model changed.
-- **Cost is superlinear only in documents, not latency.** Doubling the pool
-  doubled reranked documents (1.99×) and cost (1.83×) but raised cold p50 by
-  11–31% and p95 by 11–12%, because provider latency is not proportional to
-  document count. Retrieval is still dominated by the ~1 s rerank call.
+- **Cost scales with documents, not latency.** Doubling the pool doubled
+  reranked documents (1.99×) and cost (1.83×) but raised cold p50 by 11–31% and
+  p95 by 11–12%, because provider latency is not proportional to document
+  count. Retrieval is still dominated by the ~1 s rerank call.
 - **What the suite can and cannot detect.** 8 single / 16 multi answerable
   questions; retrieval is deterministic, so the reported flips are real, but
   small effects are not certified. The change does not address the four
@@ -125,3 +126,69 @@ Hybrid cold p50 rose by 31% (single) and 11% (multi); p95 by 11–12% on both.
   A deeper pool can also admit a new candidate that outranks a previously
   found gold — the sparse `jj-config-set-user` single-project 7 → 20 movement is
   that effect — so "no regression" is bounded by this suite.
+
+## Decision
+
+**Adopted.** The treatment meets the hypothesis on the hypothesis arm, and the
+cost is bounded and measured.
+
+- **Quality is decisive.** Hybrid `recall@7` +0.250 on both profiles,
+  `recall@20` +0.250 to +0.375, MRR@7 +0.083 to +0.104, with no answerable
+  hybrid question moving backward. The four top-3 flips are precisely the
+  first-stage ranks 21–30 that the old 30-document pool truncated before the
+  reranker saw them; no corpus, embedding, or reranker change was needed.
+- **Cost is acceptable and sublinear in latency.** Hybrid rerank spend is
+  1.83× and all-arm spend 1.84×; cold hybrid p50 rose 11–31% and p95 11–12%,
+  leaving retrieval at ~1.1–1.2 s p50 dominated by the reranker. This is within
+  the hypothesis's "roughly twice" allowance.
+- **The remaining misses need a different lever.** The four questions outside
+  both retrievers' top 50 are untouched; a deeper pool cannot recover what
+  neither retriever finds.
+- **Risk is bounded and reversible.** A deeper pool can admit a candidate that
+  outranks a previously found gold (seen once in the confounded sparse arm);
+  hybrid showed none on this suite. The treatment is one commit (`522be73`);
+  reverting it restores the 30-document, 2:1 baseline while the measured
+  artifacts stay in history.
+
+## Caveats
+
+- **Suite power.** 8 single / 16 multi answerable questions. Retrieval is
+  deterministic, so the four flips are real, but small effects are not
+  certified; "no regression" means none detectable on this suite.
+- **Sparse arm confound.** Two single-project and one multi-project sparse
+  rerank calls failed with HTTP 429 (provider TPM limit) and fell back to raw
+  retrieval order. The hybrid arm had zero failures, so the decision rests on
+  a clean arm; the sparse numbers must not be read as an effect.
+- **Provider limits.** Sixty documents per query nearly doubled rerank tokens
+  and the run came close to the provider's 6M TPM limit at this question volume;
+  higher production traffic may need batching or a lower `candidates`.
+- **Latency noise.** p50/p95 are one cold sample per question; host and provider
+  load affect them. The relative (not absolute) movement is the signal.
+- **Baseline provenance.** The baseline run records commit
+  `227b8d11a5a4…` with `candidates = 30` and weights `[2,1]` in its config
+  snapshot; the run is committed under `eval/results/baseline/2026-10-25T14-33-40Z`.
+- **Purity.** Multi-project `purity@3` dipped 0.042 while `purity@7` rose 0.027;
+  recall is the objective and was not harmed.
+
+## Reproduction
+
+The treatment is on the main line at `522be73`; the baseline arm is reused from
+its committed run rather than re-recorded.
+
+```sh
+# treatment arm (query-time only; active collections reused)
+just eval-run --experiment hybrid_candidate_pool --skip-ingest \
+  --profiles single-project,multi-project --k 3,7,20
+
+# render the comparison against the pinned baseline
+just eval-report hybrid_candidate_pool
+
+# baseline arm, only if the committed artifact must be re-recorded
+git checkout 227b8d11a5a41ec5b59d252805f70caf754465de
+just eval-run --experiment baseline --skip-ingest \
+  --profiles single-project,multi-project --k 3,7,20
+```
+
+The baseline run is committed at `eval/results/baseline/2026-10-25T14-33-40Z`;
+the treatment run at `eval/results/hybrid_candidate_pool/2026-10-28T13-46-06Z`.
+
