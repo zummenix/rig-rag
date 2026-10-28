@@ -168,7 +168,7 @@ id = "unanswerable-geography"
 question = "What is the tallest mountain in South America?"
 applies_to = ["multi-project"]
 gold = []
-notes = "Negative / unanswerable control: nothing in the corpus is relevant. In the dense-only baseline its best-scoring chunk was ~0.46, below THRESHOLD (0.5), so no hit was returned. Under hybrid RRF it shares the token 'america' with the corpus and does return hits, so it is *not* a clean no-hit control; `unanswerable-made-up-entity` is the clean one. Metrics report the no-hit rate instead of recall."
+notes = "Negative / unanswerable control: nothing in the corpus is relevant. In the dense-only baseline its best-scoring chunk (~0.46) fell below the then-active THRESHOLD (0.5), so no hit was returned; that guard has since been removed (see the README caveat 'No calibrated no-hit guard'), and retrieval now sets no score threshold, so every question returns hits, this one included. Under hybrid RRF it also shares the token 'america' with the corpus, so it is *not* a clean no-hit control; `unanswerable-made-up-entity` is the clean one. Metrics report the no-hit rate instead of recall."
 
 [[question]]
 id = "unanswerable-made-up-entity"
