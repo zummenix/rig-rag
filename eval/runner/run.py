@@ -191,11 +191,11 @@ def _sweep(
     """One uncached query per (question, mode) at `max(k)`, then prefix truncation.
 
     Every question is measured once per requested mode, in canonical mode order.
-    With `[reranker].candidates >= max(k)` (the eval profiles use the default
-    30), every smaller-k ranked list is an exact prefix of that mode's `max(k)`
-    list, so truncating the returned hits is equivalent to querying at each k.
-    Only the max-k list's hit locations are stored; the smaller-k lists are
-    derivable prefixes.
+    With `[reranker].candidates >= max(k)` (the eval profiles pin a pool at
+    least as large as `max(k)`), every smaller-k ranked list is an exact prefix
+    of that mode's `max(k)` list, so truncating the returned hits is equivalent
+    to querying at each k. Only the max-k list's hit locations are stored; the
+    smaller-k lists are derivable prefixes.
     """
 
     query_k = max(options.k_values)
