@@ -227,7 +227,8 @@ body {
   line-height: 1.6;
 }
 
-.chat-docs {
+.chat-docs,
+.thinking {
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 10px;
@@ -235,7 +236,8 @@ body {
 }
 
 .chat-docs-summary,
-.chat-doc-summary {
+.chat-doc-summary,
+.thinking-summary {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -245,33 +247,41 @@ body {
 }
 
 .chat-docs-summary::-webkit-details-marker,
-.chat-doc-summary::-webkit-details-marker {
+.chat-doc-summary::-webkit-details-marker,
+.thinking-summary::-webkit-details-marker {
   display: none;
 }
 
 .chat-docs-summary::after,
-.chat-doc-summary::after {
-  content: "›";
+.chat-doc-summary::after,
+.thinking-summary::after {
+  content: "";
+  flex: none;
+  width: 7px;
+  height: 7px;
   margin-left: auto;
-  color: var(--muted);
-  font-size: 18px;
-  line-height: 1;
+  border-right: 2px solid var(--muted);
+  border-bottom: 2px solid var(--muted);
+  transform: rotate(-45deg);
   transition: transform 0.15s ease;
 }
 
 .chat-docs[open] > .chat-docs-summary::after,
-.chat-doc[open] > .chat-doc-summary::after {
-  transform: rotate(90deg);
+.chat-doc[open] > .chat-doc-summary::after,
+.thinking[open] > .thinking-summary::after {
+  transform: rotate(45deg);
 }
 
-.chat-docs-summary {
+.chat-docs-summary,
+.thinking-summary {
   padding: 11px 14px;
   font-size: 14px;
   font-weight: 600;
 }
 
 .chat-docs-summary:hover,
-.chat-doc-summary:hover {
+.chat-doc-summary:hover,
+.thinking-summary:hover {
   color: var(--text);
 }
 
@@ -384,38 +394,7 @@ body {
 }
 
 .thinking {
-  background: var(--panel-2);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 8px 12px;
   color: var(--muted);
-}
-
-.thinking summary {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  cursor: pointer;
-  font-size: 13px;
-  list-style: none;
-  user-select: none;
-}
-
-.thinking summary::-webkit-details-marker {
-  display: none;
-}
-
-.thinking summary::after {
-  content: "›";
-  flex: none;
-  color: var(--muted);
-  font-size: 18px;
-  line-height: 1;
-  transition: transform 0.15s ease;
-}
-
-.thinking[open] > .thinking-summary::after {
-  transform: rotate(90deg);
 }
 
 .thinking-label {
@@ -440,7 +419,8 @@ body {
 }
 
 .thinking pre {
-  margin: 8px 0 0;
+  margin: 0;
+  padding: 0 14px 12px;
   white-space: pre-wrap;
   word-break: break-word;
   font-size: 13px;
