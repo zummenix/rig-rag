@@ -4211,6 +4211,7 @@ dependencies = [
  "reqwest 0.13.5",
  "serde_json",
  "shared",
+ "wasm-bindgen",
  "web-sys",
 ]
 

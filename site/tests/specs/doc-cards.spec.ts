@@ -1,33 +1,44 @@
 import { expect, test } from '@playwright/test';
 
-import { MOCK_DOC_LOCATIONS, chatPanel, submitChat } from '../support';
+import { MOCK_ANSWER, MOCK_DOC_LOCATIONS, chatPanel, submitChat } from '../support';
 
-test('renders doc cards collapsed and expands them on click', async ({ page }) => {
+test('groups doc cards under one collapsible section with per-doc details', async ({
+  page,
+}) => {
   await page.goto('/');
   await submitChat(page, 'where are tokens?');
 
-  const cards = chatPanel(page).locator('.doc-card');
+  const panel = chatPanel(page);
+  const section = panel.locator('details.chat-docs');
+
+  await expect(section).toBeVisible();
+  await expect(section).not.toHaveAttribute('open', '');
+  await expect(section.locator('.chat-docs-count')).toHaveText(
+    String(MOCK_DOC_LOCATIONS.length),
+  );
+
+  const cards = section.locator('details.chat-doc');
   await expect(cards).toHaveCount(MOCK_DOC_LOCATIONS.length);
   for (const [index, location] of MOCK_DOC_LOCATIONS.entries()) {
     await expect(cards.nth(index).locator('.doc-path')).toHaveText(location);
   }
-  await expect(cards.first().locator('.doc-text')).toContainText(
-    'Access tokens expire after 60 minutes.',
-  );
 
   const first = cards.first();
-  const lineClamp = () =>
-    first
-      .locator('.doc-text')
-      .evaluate((el) => getComputedStyle(el).getPropertyValue('-webkit-line-clamp'));
+  await expect(first).not.toHaveAttribute('open', '');
 
-  // Collapsed by default: clamped to 4 lines, no `expanded` class.
-  await expect(first).not.toHaveClass(/expanded/);
-  expect(await lineClamp()).toBe('4');
+  // Open the group, then the first document on its own.
+  await section.locator('.chat-docs-summary').click();
+  await expect(section).toHaveAttribute('open', '');
+  await first.locator('summary').click();
+  await expect(first).toHaveAttribute('open', '');
+  await expect(first.locator('.doc-text')).toContainText(
+    'Access tokens expire after 60 minutes.',
+  );
+  await expect(cards.nth(1).locator('.doc-text')).toBeHidden();
 
-  await first.click();
-
-  // Expanding lifts the clamp.
-  await expect(first).toHaveClass(/expanded/);
-  expect(await lineClamp()).not.toBe('4');
+  // Streaming deltas keep re-rendering the turn; the open state must survive.
+  await expect(panel.locator('.bubble.assistant')).toContainText(MOCK_ANSWER);
+  await expect(panel.locator('.composer-send')).toBeEnabled();
+  await expect(section).toHaveAttribute('open', '');
+  await expect(first).toHaveAttribute('open', '');
 });
