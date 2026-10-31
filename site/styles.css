@@ -392,9 +392,51 @@ body {
 }
 
 .thinking summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   cursor: pointer;
   font-size: 13px;
+  list-style: none;
   user-select: none;
+}
+
+.thinking summary::-webkit-details-marker {
+  display: none;
+}
+
+.thinking summary::after {
+  content: "›";
+  flex: none;
+  color: var(--muted);
+  font-size: 18px;
+  line-height: 1;
+  transition: transform 0.15s ease;
+}
+
+.thinking[open] > .thinking-summary::after {
+  transform: rotate(90deg);
+}
+
+.thinking-label {
+  flex: none;
+  color: var(--text);
+  font-weight: 600;
+}
+
+.thinking-last-line {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.thinking[open] .thinking-last-line {
+  display: none;
 }
 
 .thinking pre {

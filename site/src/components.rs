@@ -138,6 +138,46 @@ fn ChatDoc(doc: DocHit) -> impl IntoView {
     }
 }
 
+/// Streaming reasoning trace.
+///
+/// While collapsed, the summary shows the most recent non-empty line of the
+/// stream and updates as new reasoning text arrives. Expanding the block hides
+/// that preview and reveals the full trace.
+#[component]
+pub fn Thinking(text: Signal<String>) -> impl IntoView {
+    let expanded = RwSignal::new(false);
+    let last_line = Memo::new(move |_| {
+        text.get()
+            .lines()
+            .rev()
+            .map(str::trim)
+            .find(|line| !line.is_empty())
+            .unwrap_or_default()
+            .to_owned()
+    });
+
+    view! {
+        <details
+            class="thinking"
+            open=move || expanded.get()
+            on:toggle=move |event: web_sys::Event| {
+                if let Some(details) = event
+                    .target()
+                    .and_then(|target| target.dyn_into::<web_sys::HtmlDetailsElement>().ok())
+                {
+                    expanded.set(details.open());
+                }
+            }
+        >
+            <summary class="thinking-summary">
+                <span class="thinking-label">"Thinking"</span>
+                <span class="thinking-last-line">{move || last_line.get()}</span>
+            </summary>
+            <pre>{move || text.get()}</pre>
+        </details>
+    }
+}
+
 /// Retrieval results for the Search tab.
 ///
 /// Unlike the chat sources, these are always expanded: the full chunk text is
