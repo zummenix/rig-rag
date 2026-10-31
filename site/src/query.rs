@@ -6,7 +6,7 @@ use leptos::task::spawn_local;
 use shared::{DocHit, MAX_K, MIN_K};
 
 use crate::api;
-use crate::components::{Composer, DocList};
+use crate::components::{Composer, SearchResults};
 
 /// Retrieval-only page backed by `POST /api/query`.
 #[component]
@@ -78,7 +78,7 @@ pub fn QueryPage() -> impl IntoView {
                             view! { <div class="empty-card">"No matching documents."</div> }
                                 .into_any()
                         }
-                        Some(hits) => view! { <DocList docs=hits /> }.into_any(),
+                        Some(hits) => view! { <SearchResults docs=hits /> }.into_any(),
                     }
                 }
             }}

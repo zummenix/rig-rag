@@ -138,36 +138,38 @@ fn ChatDoc(doc: DocHit) -> impl IntoView {
     }
 }
 
-/// One retrieved chunk: source location + score header, text clamped to a few
-/// lines until clicked.
+/// Retrieval results for the Search tab.
+///
+/// Unlike the chat sources, these are always expanded: the full chunk text is
+/// the point of a search result, so the cards are prominent and non-collapsible.
 #[component]
-pub fn DocCard(doc: DocHit) -> impl IntoView {
-    let expanded = RwSignal::new(false);
+pub fn SearchResults(docs: Vec<DocHit>) -> impl IntoView {
+    view! {
+        <div class="search-results">
+            {docs
+                .into_iter()
+                .enumerate()
+                .map(|(index, doc)| view! { <SearchResultCard rank=index + 1 doc=doc /> })
+                .collect::<Vec<_>>()}
+        </div>
+    }
+}
+
+/// One always-open search hit with its rank, source location, and full text.
+#[component]
+fn SearchResultCard(rank: usize, doc: DocHit) -> impl IntoView {
     let location = doc.source_location();
     let score = format!("{:.2}", doc.score);
     let text = doc.text;
 
     view! {
-        <article
-            class="doc-card"
-            class:expanded=move || expanded.get()
-            on:click=move |_| expanded.update(|value| *value = !*value)
-        >
-            <header class="doc-card-header">
-                <span class="doc-path">{location}</span>
-                <span class="doc-score">{score}</span>
+        <article class="search-result">
+            <header class="search-result-header">
+                <span class="search-rank">"#" {rank}</span>
+                <span class="search-path">{location}</span>
+                <span class="search-score">{score}</span>
             </header>
-            <p class="doc-text">{text}</p>
+            <p class="search-text">{text}</p>
         </article>
-    }
-}
-
-/// A vertical list of [`DocCard`]s, preserving retrieval order.
-#[component]
-pub fn DocList(docs: Vec<DocHit>) -> impl IntoView {
-    view! {
-        <div class="doc-list">
-            {docs.into_iter().map(|doc| view! { <DocCard doc=doc /> }).collect::<Vec<_>>()}
-        </div>
     }
 }
