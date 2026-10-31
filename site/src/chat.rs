@@ -6,7 +6,7 @@ use leptos::task::spawn_local;
 use shared::{ChatEvent, DocHit, Msg, Role};
 
 use crate::api;
-use crate::components::{Composer, DocList};
+use crate::components::{ChatDocs, Composer};
 
 /// One rendered exchange. `done` is set once a `Final`/`Error` arrives (or the
 /// stream ends); `error` short-circuits the answer bubble.
@@ -140,14 +140,13 @@ pub fn ChatPage() -> impl IntoView {
 /// Renders one exchange reactively from its own signal.
 #[component]
 fn TurnView(turn: RwSignal<Turn>) -> impl IntoView {
+    let docs = Memo::new(move |_| turn.get().docs.clone());
+
     view! {
         <div class="turn">
             <div class="bubble user">{move || turn.get().prompt}</div>
 
-            {move || {
-                let docs = turn.get().docs;
-                (!docs.is_empty()).then(|| view! { <DocList docs=docs /> })
-            }}
+            <ChatDocs docs=docs />
 
             {move || {
                 let thinking = turn.get().thinking;

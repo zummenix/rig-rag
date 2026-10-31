@@ -185,7 +185,7 @@ body {
   white-space: nowrap;
 }
 
-.doc-text {
+.doc-card .doc-text {
   margin: 0;
   white-space: pre-wrap;
   display: -webkit-box;
@@ -197,6 +197,100 @@ body {
 .doc-card.expanded .doc-text {
   -webkit-line-clamp: unset;
   display: block;
+}
+
+.chat-docs {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  margin: 4px 0;
+}
+
+.chat-docs-summary,
+.chat-doc-summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+
+.chat-docs-summary::-webkit-details-marker,
+.chat-doc-summary::-webkit-details-marker {
+  display: none;
+}
+
+.chat-docs-summary::after,
+.chat-doc-summary::after {
+  content: "›";
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 18px;
+  line-height: 1;
+  transition: transform 0.15s ease;
+}
+
+.chat-docs[open] > .chat-docs-summary::after,
+.chat-doc[open] > .chat-doc-summary::after {
+  transform: rotate(90deg);
+}
+
+.chat-docs-summary {
+  padding: 11px 14px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.chat-docs-summary:hover,
+.chat-doc-summary:hover {
+  color: var(--text);
+}
+
+.chat-docs-label {
+  color: var(--text);
+}
+
+.chat-docs-count {
+  min-width: 22px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--accent-weak);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.chat-docs .doc-list {
+  margin: 0;
+  padding: 0 10px 10px;
+  gap: 8px;
+}
+
+.chat-doc {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.chat-doc-summary {
+  padding: 8px 10px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.chat-doc-summary .doc-path {
+  flex: 1;
+  color: var(--text);
+}
+
+.chat-doc .doc-text {
+  margin: 0;
+  padding: 0 10px 10px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 14px;
 }
 
 .empty-card {
