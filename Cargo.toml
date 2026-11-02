@@ -42,10 +42,13 @@ hex = "0.4"
 libc = "0.2"
 qdrant-client = "1.19"
 reqwest = { version = "0.13", features = ["json", "stream"] }
-rig-agent = "0.44"
-rig-core = { version = "0.44", features = ["reqwest"] }
+rig-agent = { version = "0.46", default-features = false }
+rig-core = { version = "0.46", default-features = false, features = ["reqwest", "rustls"] }
 serde = { version = "1.0.229", features = ["derive"] }
-serde_json = "1.0"
+# rig-core 0.44 forced these two; 0.46 leaves them to the application. Keep
+# them so `ingest --pin` preserves `sources.json` key order and floats parse
+# as before.
+serde_json = { version = "1.0", features = ["float_roundtrip", "preserve_order"] }
 sha2 = "0.11"
 shared = { path = "shared" }
 tiktoken = { version = "4.1.1", default-features = false, features = ["vocab-cl100k_base"] }
