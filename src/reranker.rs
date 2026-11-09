@@ -94,7 +94,7 @@ impl Reranker {
     pub async fn rerank(
         &self,
         question: &str,
-        documents: &[String],
+        documents: &[&str],
         mode: SearchMode,
     ) -> Result<Vec<Ranked>> {
         let started = Instant::now();
@@ -140,7 +140,7 @@ impl Reranker {
     async fn score(
         &self,
         question: &str,
-        documents: &[String],
+        documents: &[&str],
     ) -> Result<(Vec<Ranked>, Option<Usage>)> {
         let body = RequestBody {
             model: &self.model,
@@ -176,7 +176,7 @@ impl Reranker {
 struct RequestBody<'a> {
     model: &'a str,
     query: &'a str,
-    documents: &'a [String],
+    documents: &'a [&'a str],
 }
 
 #[derive(Deserialize)]
@@ -346,21 +346,21 @@ mod tests {
             false,
         )
         .unwrap();
-        let documents = vec!["c".to_owned(), "b".to_owned(), "a".to_owned()];
+        let documents: &[&str] = &["c", "b", "a"];
 
         let first = reranker
-            .rerank("question", &documents, SearchMode::Hybrid)
+            .rerank("question", documents, SearchMode::Hybrid)
             .await
             .unwrap();
         let second = reranker
-            .rerank("question", &documents, SearchMode::Sparse)
+            .rerank("question", documents, SearchMode::Sparse)
             .await
             .unwrap();
 
         let reranked_texts = |ranked: &[Ranked]| {
             ranked
                 .iter()
-                .map(|item| documents[item.index].clone())
+                .map(|item| documents[item.index].to_owned())
                 .collect::<Vec<_>>()
         };
         assert_eq!(reranked_texts(&first), vec!["a", "c"]);
