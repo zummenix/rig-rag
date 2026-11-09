@@ -13,7 +13,7 @@ use reqwest::StatusCode;
 use rig_rag::serve::{
     self,
     mock::{MockCompleter, MockRetriever, mock_answer},
-    state::{AppState, Retriever},
+    state::{AppState, Completer, Retriever},
 };
 use shared::{ChatEvent, ChatRequest, DocHit, Msg, QueryRequest, Role, SearchMode};
 use tokio::net::TcpListener;
@@ -46,15 +46,26 @@ impl Retriever for RecordingRetriever {
     }
 }
 
-/// Builds state around a retriever and the given completer.
-fn state(retriever: Arc<dyn Retriever>, completer: MockCompleter) -> AppState {
+/// Builds state around a retriever and an optional completer.
+fn state(retriever: Arc<dyn Retriever>, completer: Option<Arc<dyn Completer>>) -> AppState {
     AppState {
         retriever,
-        completer: Arc::new(completer),
+        completer,
         // A directory that does not exist, so the router has no static fallback.
         site_dir: PathBuf::from("./rig-rag-no-such-site-dir"),
         keep_alive: Duration::from_secs(15),
     }
+}
+
+/// Binds the router around `state`, returning its base URL.
+async fn spawn_state(state: AppState) -> String {
+    let app = serve::router(state);
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+    format!("http://{addr}")
 }
 
 /// Binds the router on an ephemeral port and returns its base URL.
@@ -62,15 +73,14 @@ async fn spawn(completer: MockCompleter) -> String {
     spawn_with(Arc::new(MockRetriever::new()), completer).await
 }
 
-/// Binds the router around a specific retriever, returning its base URL.
+/// Binds the router around a specific retriever and completer.
 async fn spawn_with(retriever: Arc<dyn Retriever>, completer: MockCompleter) -> String {
-    let app = serve::router(state(retriever, completer));
-    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let addr = listener.local_addr().unwrap();
-    tokio::spawn(async move {
-        axum::serve(listener, app).await.unwrap();
-    });
-    format!("http://{addr}")
+    spawn_state(state(retriever, Some(Arc::new(completer)))).await
+}
+
+/// Binds the router around a retriever with chat disabled.
+async fn spawn_without_completer(retriever: Arc<dyn Retriever>) -> String {
+    spawn_state(state(retriever, None)).await
 }
 
 /// Reads a chat turn to completion, returning `(event_name, event)` pairs.
@@ -359,4 +369,81 @@ async fn chat_survives_client_disconnect() {
         .await
         .unwrap();
     assert_eq!(health.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+async fn chat_returns_503_when_unconfigured() {
+    let retriever = RecordingRetriever::default();
+    let url = spawn_without_completer(Arc::new(retriever.clone())).await;
+    let response = reqwest::Client::new()
+        .post(format!("{url}/api/chat"))
+        .json(&ChatRequest {
+            history: Vec::new(),
+            prompt: "hello".into(),
+        })
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+    let body = response.text().await.unwrap();
+    assert!(body.contains("chat is not configured"), "body: {body}");
+    assert!(body.contains("[llm]"), "body names the fix: {body}");
+    assert!(
+        retriever.modes().is_empty(),
+        "the 503 must be returned before retrieval"
+    );
+}
+
+#[tokio::test]
+async fn query_works_without_llm() {
+    let url = spawn_without_completer(Arc::new(MockRetriever::new())).await;
+    let response = reqwest::Client::new()
+        .post(format!("{url}/api/query"))
+        .json(&QueryRequest {
+            question: "q".into(),
+            k: Some(2),
+            mode: None,
+        })
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(response.json::<Vec<DocHit>>().await.unwrap().len(), 2);
+}
+
+#[tokio::test]
+async fn first_turn_error_names_provider_model_and_base_url() {
+    // An OpenAI-compatible endpoint that always fails, so the error context
+    // added by `RigCompleter` is what the client sees.
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        let app = axum::Router::new().route(
+            "/v1/chat/completions",
+            axum::routing::post(|| async {
+                (axum::http::StatusCode::INTERNAL_SERVER_ERROR, "boom")
+            }),
+        );
+        axum::serve(listener, app).await.unwrap();
+    });
+
+    let llm = rig_rag::config::LlmConfig {
+        provider: rig_rag::config::LlmProvider::Custom,
+        model: "test-model".into(),
+        base_url: Some(format!("http://{addr}/v1")),
+    };
+    let completer = serve::prod::RigCompleter::connect(&llm).unwrap();
+    let mut stream = completer.complete("hi".into(), Vec::new()).await.unwrap();
+    let error = stream
+        .next()
+        .await
+        .expect("the failing provider must yield an item")
+        .expect_err("the provider returns 500");
+    let message = format!("{error:#}");
+    assert!(message.contains("provider=custom"), "message: {message}");
+    assert!(message.contains("model=test-model"), "message: {message}");
+    assert!(
+        message.contains(&format!("base_url=http://{addr}/v1")),
+        "message: {message}"
+    );
 }

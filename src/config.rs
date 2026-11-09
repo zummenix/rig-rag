@@ -31,6 +31,8 @@ pub struct Config {
     pub reranker: Option<RerankerConfig>,
     /// Defaults for the server; CLI flags override each field.
     pub server: Option<ServerConfig>,
+    /// Optional chat LLM. Absent entirely means chat is disabled.
+    pub llm: Option<LlmConfig>,
 }
 
 /// Optional `[reranker]` section for a cloud `/v1/rerank` endpoint.
@@ -160,7 +162,32 @@ impl Config {
     }
 
     pub fn parse(raw: &str) -> Result<Self> {
-        toml::from_str(raw).context("failed to parse config")
+        let mut config: Config = toml::from_str(raw).context("failed to parse config")?;
+        config.validate_llm()?;
+        Ok(config)
+    }
+
+    /// Validates the optional `[llm]` section.
+    fn validate_llm(&mut self) -> Result<()> {
+        let Some(llm) = self.llm.as_mut() else {
+            return Ok(());
+        };
+        let model = llm.model.trim();
+        if model.is_empty() {
+            anyhow::bail!("[llm].model must not be empty");
+        }
+        llm.model = model.to_owned();
+        if let Some(base_url) = llm.base_url.as_mut() {
+            let trimmed = base_url.trim().trim_end_matches('/');
+            if trimmed.is_empty() {
+                anyhow::bail!("[llm].base_url must not be empty");
+            }
+            *base_url = trimmed.to_owned();
+        }
+        if llm.provider == LlmProvider::Custom && llm.base_url.is_none() {
+            anyhow::bail!("[llm].base_url is required for provider 'custom'");
+        }
+        Ok(())
     }
 
     fn with_qdrant_override(mut self, url: Option<String>) -> Self {
@@ -168,6 +195,96 @@ impl Config {
             self.qdrant.url = url;
         }
         self
+    }
+}
+
+/// Chat provider, from `[llm].provider`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum LlmProvider {
+    Openai,
+    Openrouter,
+    Ollama,
+    Custom,
+}
+
+impl LlmProvider {
+    /// Provider name as a static string, for logs and errors.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            LlmProvider::Openai => "openai",
+            LlmProvider::Openrouter => "openrouter",
+            LlmProvider::Ollama => "ollama",
+            LlmProvider::Custom => "custom",
+        }
+    }
+}
+
+/// Optional `[llm]` section selecting the chat model.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct LlmConfig {
+    pub provider: LlmProvider,
+    /// Provider-native model id, used verbatim.
+    pub model: String,
+    /// Optional endpoint override; defaulted per provider, required for `custom`.
+    pub base_url: Option<String>,
+}
+
+impl LlmConfig {
+    /// Resolved chat endpoint. Defaults per provider; `custom` uses its own
+    /// required value.
+    pub fn base_url(&self) -> &str {
+        if let Some(base_url) = self.base_url.as_deref() {
+            return base_url;
+        }
+        match self.provider {
+            LlmProvider::Openrouter => "https://openrouter.ai/api/v1",
+            LlmProvider::Openai => "https://api.openai.com/v1",
+            LlmProvider::Ollama => "http://localhost:11434/v1",
+            // Validation requires `base_url` for `custom`.
+            LlmProvider::Custom => {
+                unreachable!("[llm].base_url is validated for provider 'custom'")
+            }
+        }
+    }
+
+    /// Environment variable holding the provider's authorization token.
+    pub fn api_key_env(&self) -> &'static str {
+        match self.provider {
+            LlmProvider::Openrouter => "OPENROUTER_API_KEY",
+            LlmProvider::Openai => "OPENAI_API_KEY",
+            LlmProvider::Ollama => "OLLAMA_API_KEY",
+            LlmProvider::Custom => "LLM_API_KEY",
+        }
+    }
+
+    /// Whether the provider requires an authorization token.
+    pub fn key_required(&self) -> bool {
+        matches!(self.provider, LlmProvider::Openrouter | LlmProvider::Openai)
+    }
+
+    /// Authorization token, read from the environment via `lookup`.
+    ///
+    /// Values are trimmed and an empty string is treated as unset. Errors
+    /// naming the environment variable when the provider requires one.
+    pub fn read_key(
+        &self,
+        lookup: impl Fn(&str) -> Option<String>,
+    ) -> anyhow::Result<Option<String>> {
+        let name = self.api_key_env();
+        let value = lookup(name).unwrap_or_default();
+        let value = value.trim();
+        if value.is_empty() {
+            if self.key_required() {
+                anyhow::bail!(
+                    "{name} is required for provider '{}'",
+                    self.provider.as_str()
+                );
+            }
+            return Ok(None);
+        }
+        Ok(Some(value.to_owned()))
     }
 }
 
@@ -199,6 +316,14 @@ model = "bge-small-en-v1.5"
 [collection]
 active = ""
 "#;
+
+    fn llm_config(provider: &str, model: &str, base_url: Option<&str>) -> String {
+        let mut raw = format!("[llm]\nprovider = \"{provider}\"\nmodel = \"{model}\"\n");
+        if let Some(base_url) = base_url {
+            raw.push_str(&format!("base_url = \"{base_url}\"\n"));
+        }
+        format!("{SAMPLE}\n{raw}")
+    }
 
     #[test]
     fn parses_all_fields() {
@@ -318,5 +443,164 @@ active = ""
         assert!(written.contains("# keep me"));
         assert_eq!(Config::parse(&written).unwrap().collection.active, "docs-x");
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn llm_defaults_per_provider() {
+        for (provider, key_env, expected_base_url, required) in [
+            (
+                "openai",
+                "OPENAI_API_KEY",
+                "https://api.openai.com/v1",
+                true,
+            ),
+            (
+                "openrouter",
+                "OPENROUTER_API_KEY",
+                "https://openrouter.ai/api/v1",
+                true,
+            ),
+            (
+                "ollama",
+                "OLLAMA_API_KEY",
+                "http://localhost:11434/v1",
+                false,
+            ),
+        ] {
+            let config =
+                Config::parse(&llm_config(provider, "m", None)).expect("expected to parse");
+            let llm = config.llm.expect("llm section");
+            assert_eq!(llm.provider.as_str(), provider);
+            assert_eq!(llm.model, "m");
+            assert_eq!(llm.base_url(), expected_base_url);
+            assert_eq!(llm.api_key_env(), key_env);
+            assert_eq!(llm.key_required(), required);
+        }
+    }
+
+    #[test]
+    fn llm_custom_defaults_to_its_own_base_url() {
+        let config = Config::parse(&llm_config(
+            "custom",
+            "m",
+            Some("https://api.example.com/openai/v1/"),
+        ))
+        .unwrap();
+        let llm = config.llm.expect("llm section");
+        assert_eq!(llm.base_url(), "https://api.example.com/openai/v1");
+        assert_eq!(llm.api_key_env(), "LLM_API_KEY");
+        assert!(!llm.key_required());
+    }
+
+    #[test]
+    fn rejects_custom_without_base_url() {
+        assert!(Config::parse(&llm_config("custom", "m", None)).is_err());
+    }
+
+    #[test]
+    fn rejects_empty_model() {
+        assert!(Config::parse(&llm_config("ollama", "", None)).is_err());
+        assert!(Config::parse(&llm_config("ollama", "   ", None)).is_err());
+    }
+
+    #[test]
+    fn rejects_unknown_provider() {
+        assert!(Config::parse(&llm_config("azure", "m", None)).is_err());
+    }
+
+    #[test]
+    fn rejects_unknown_llm_field() {
+        let raw = format!("{}bogus = 1\n", llm_config("ollama", "m", None));
+        assert!(Config::parse(&raw).is_err());
+    }
+
+    #[test]
+    fn base_url_override_wins_for_builtin_providers() {
+        for provider in ["openai", "openrouter", "ollama"] {
+            let config = Config::parse(&llm_config(
+                provider,
+                "m",
+                Some("http://proxy.example/v1//"),
+            ))
+            .unwrap();
+            assert_eq!(
+                config.llm.unwrap().base_url(),
+                "http://proxy.example/v1",
+                "provider={provider}"
+            );
+        }
+    }
+
+    #[test]
+    fn rejects_empty_base_url() {
+        assert!(Config::parse(&llm_config("openai", "m", Some(""))).is_err());
+        assert!(Config::parse(&llm_config("openai", "m", Some("   "))).is_err());
+    }
+
+    #[test]
+    fn rejects_missing_model() {
+        let raw = format!("{SAMPLE}\n[llm]\nprovider = \"ollama\"\n");
+        assert!(Config::parse(&raw).is_err());
+    }
+
+    #[test]
+    fn llm_credential_helpers() {
+        let required = Config::parse(&llm_config("openrouter", "m", None)).unwrap();
+        let optional = Config::parse(&llm_config("ollama", "m", None)).unwrap();
+        assert_eq!(
+            required.llm.as_ref().unwrap().api_key_env(),
+            "OPENROUTER_API_KEY"
+        );
+        assert!(required.llm.as_ref().unwrap().key_required());
+        assert_eq!(
+            optional.llm.as_ref().unwrap().api_key_env(),
+            "OLLAMA_API_KEY"
+        );
+        assert!(!optional.llm.as_ref().unwrap().key_required());
+    }
+
+    #[test]
+    fn read_key_required_and_optional() {
+        let required = LlmConfig {
+            provider: LlmProvider::Openai,
+            model: "m".into(),
+            base_url: None,
+        };
+        let optional = LlmConfig {
+            provider: LlmProvider::Ollama,
+            model: "m".into(),
+            base_url: None,
+        };
+
+        // Required provider with the variable unset: an error naming it.
+        let missing = required.read_key(|_| None).unwrap_err();
+        assert!(
+            missing.to_string().contains("OPENAI_API_KEY"),
+            "error names the variable: {missing}"
+        );
+
+        // Optional provider with the variable unset or empty: no key, no error.
+        assert_eq!(optional.read_key(|_| None).unwrap(), None);
+        let empty = optional
+            .read_key(|name| {
+                if name == "OLLAMA_API_KEY" {
+                    Some("".to_string())
+                } else {
+                    None
+                }
+            })
+            .unwrap();
+        assert_eq!(empty, None);
+
+        let set = required
+            .read_key(|name| {
+                if name == "OPENAI_API_KEY" {
+                    Some("  sk-secret  ".to_string())
+                } else {
+                    None
+                }
+            })
+            .unwrap();
+        assert_eq!(set, Some("sk-secret".to_owned()));
     }
 }

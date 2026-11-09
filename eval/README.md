@@ -40,8 +40,8 @@ just eval-run --experiment baseline     # ingest → promote → serve → sweep
 just eval-report baseline               # render the newest run as self-contained HTML
 ```
 
-`just eval-run` needs Qdrant and `OPENROUTER_*` (see Requirements). For the full
-flag lists, run `just eval-run-help` and `just eval-report-help`.
+`just eval-run` needs Qdrant (and `RERANKER_API_KEY` where applicable). For
+the full flag lists, run `just eval-run-help` and `just eval-report-help`.
 
 One run sweeps **every search mode by default** (`hybrid`, `dense`, `sparse`) in
 the same ingest/serve pass, so it issues one query per (question, profile) per
@@ -73,9 +73,8 @@ the reference run (no record document — just the committed runs and its
   no third-party packages.
 - A running Qdrant reachable at the profile's `[qdrant].url`.
 - `git` on `PATH` (profiles pin corpus sources to commit SHAs).
-- `OPENROUTER_API_KEY` and `OPENROUTER_MODEL_NAME` in the environment: `serve`
-  boots the chat agent at startup even though `/api/query` needs no LLM, so the
-  retrieval harness currently inherits that requirement.
+- No LLM credential: eval profiles omit `[llm]`, so `serve` boots without one
+  and retrieval runs need none.
 - `RERANKER_API_KEY` when the selected profiles carry a `[reranker]` section
   (the `cloud_reranking` treatment arm does); `serve` fails fast without it.
 
@@ -219,9 +218,8 @@ Notes:
 - Counts and tokenization are skipped entirely without `--report`, so normal
   ingest pays no tokenizer cost. `chunk_tokens` is the per-source chunk-size
   distribution (the input to the drop-small-chunks experiment).
-- The report deliberately does **not** record a rig-rag commit: the runtime image
-  has no `.git` and no `git` binary. The Python runner owns the measured commit
-  in `results.json`.
+- The report deliberately does **not** record a rig-rag commit: the Python
+  runner owns the measured commit in `results.json`.
 - The committed drop-small-chunks reports also carry a `min_chunk_tokens` field
   from the arm that filtered small chunks; that filtering seam was **reverted**,
   so current runs do not emit it. The framework renders the field when present.
