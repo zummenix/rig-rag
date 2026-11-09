@@ -55,7 +55,7 @@ tiktoken = { version = "4.1.1", default-features = false, features = ["vocab-cl1
 tokio = { version = "1.53.2", features = ["macros", "net", "rt-multi-thread", "time"] }
 toml = "1.1"
 toml_edit = "0.25"
-tower-http = { version = "0.6", features = ["fs"] }
+tower-http = { version = "0.7", features = ["fs"] }
 uuid = "1.28.0"
 
 [dev-dependencies]
