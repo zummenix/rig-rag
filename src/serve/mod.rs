@@ -26,7 +26,7 @@ use axum::{
 use tower_http::services::ServeDir;
 
 use crate::config::Config;
-use state::AppState;
+use state::{AppState, Completer};
 
 /// Default address the server binds when no flag or config value is given.
 pub const DEFAULT_BIND: &str = "127.0.0.1:8080";
@@ -64,7 +64,21 @@ pub async fn run(args: ServeArgs) -> Result<()> {
         .unwrap_or(DEFAULT_KEEP_ALIVE);
 
     let retriever = prod::QdrantRetriever::connect(&config, args.log_eval_metrics).await?;
-    let completer = prod::RigCompleter::connect()?;
+    let completer: Option<Arc<dyn Completer>> = match config.llm.as_ref() {
+        Some(llm) => Some(Arc::new(prod::RigCompleter::connect(llm)?)),
+        None => None,
+    };
+
+    if let Some(llm) = &config.llm {
+        println!(
+            "llm: provider={} model={} base_url={}",
+            llm.provider.as_str(),
+            llm.model,
+            llm.base_url()
+        );
+    } else {
+        println!("llm: disabled");
+    }
 
     if let Some(reranker) = &config.reranker {
         println!(
@@ -79,7 +93,7 @@ pub async fn run(args: ServeArgs) -> Result<()> {
 
     let app = router(AppState {
         retriever: Arc::new(retriever),
-        completer: Arc::new(completer),
+        completer,
         site_dir: site_dir.clone(),
         keep_alive,
     });

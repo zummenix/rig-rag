@@ -8,29 +8,3 @@ services:
     volumes:
       # Bind mount so Qdrant's data is visible on the host.
       - ./qdrant_storage:/qdrant/storage
-
-  # Serves the API and the built WASM UI. Requires an active collection and
-  # OpenRouter creds (it refuses to boot without them). Source ingestion and
-  # promotion run on the host against this compose-published Qdrant, not in the
-  # container.
-  server:
-    image: rig-rag:latest
-    build:
-      context: .
-      dockerfile: Containerfile
-    command: ["serve", "--bind", "0.0.0.0:8080", "--site-dir", "/app/site/dist"]
-    restart: unless-stopped
-    depends_on:
-      - qdrant
-    working_dir: /app
-    ports:
-      - "8080:8080"
-    environment:
-      QDRANT_URL: http://qdrant:6334
-      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
-      OPENROUTER_MODEL_NAME: ${OPENROUTER_MODEL_NAME:-}
-      RERANKER_API_KEY: ${RERANKER_API_KEY:-}
-    volumes:
-      - ./sources.json:/app/sources.json:ro
-      - ./rig-rag.toml:/app/rig-rag.toml
-      - ./data:/app/data

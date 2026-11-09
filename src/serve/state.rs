@@ -18,7 +18,9 @@ pub type ChatStream = Pin<Box<dyn Stream<Item = Result<ChatEvent>> + Send + 'sta
 #[derive(Clone)]
 pub struct AppState {
     pub retriever: Arc<dyn Retriever>,
-    pub completer: Arc<dyn Completer>,
+    /// `None` when no `[llm]` section was configured: chat is disabled and
+    /// `/api/chat` answers `503` without touching the retriever.
+    pub completer: Option<Arc<dyn Completer>>,
     pub site_dir: PathBuf,
     pub keep_alive: Duration,
 }

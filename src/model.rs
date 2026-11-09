@@ -30,5 +30,22 @@ pub fn run(config_path: impl AsRef<Path>) -> Result<()> {
             reranker.model, reranker.base_url, reranker.candidates
         );
     }
+    if let Some(llm) = config.as_ref().and_then(|config| config.llm.as_ref()) {
+        // `model` must not require credentials or contact the provider, so a
+        // missing key (even for a required provider) is reported as `unset`.
+        let key = llm
+            .read_key(|n| std::env::var(n).ok())
+            .unwrap_or(None)
+            .map_or("unset".to_string(), |_| "set".to_string());
+        println!(
+            "llm: provider={} model={} base_url={} key={}",
+            llm.provider.as_str(),
+            llm.model,
+            llm.base_url(),
+            key
+        );
+    } else {
+        println!("llm: disabled");
+    }
     Ok(())
 }

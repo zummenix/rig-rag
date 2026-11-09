@@ -43,7 +43,7 @@ async fn main() -> Result<()> {
     .with_delay(Duration::from_millis(args.event_delay_ms));
     let state = AppState {
         retriever: Arc::new(mock::MockRetriever::new()),
-        completer: Arc::new(completer),
+        completer: Some(Arc::new(completer)),
         site_dir: args.site_dir,
         keep_alive: Duration::from_secs(args.keep_alive_secs),
     };

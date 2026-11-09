@@ -292,9 +292,9 @@ impl Store {
         }
 
         if let Some(reranker) = &self.reranker {
-            let documents: Vec<String> = hits.iter().map(|(chunk, _)| chunk.text.clone()).collect();
+            let texts: Vec<&str> = hits.iter().map(|(chunk, _)| chunk.text.as_str()).collect();
             // On failure the reranker has already logged it and retrieval order is the fallback.
-            if let Ok(ranked) = reranker.rerank(question, &documents, mode).await {
+            if let Ok(ranked) = reranker.rerank(question, &texts, mode).await {
                 return Ok(select_reranked(hits, &ranked, k));
             }
         }

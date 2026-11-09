@@ -3,6 +3,7 @@ use std::convert::Infallible;
 use axum::{
     Json,
     extract::State,
+    http::StatusCode,
     response::{
         IntoResponse, Response,
         sse::{Event, KeepAlive, Sse},
@@ -56,9 +57,18 @@ pub fn build_prompt(question: &str, docs: &[DocHit]) -> String {
 /// `POST /api/chat` — retrieve on the latest user message, then stream
 /// `Docs` → (`Thinking`/`Delta`)* → `Final` | `Error` as SSE.
 ///
-/// Pre-stream failures (retrieval or completer setup) return a plain `500`;
-/// once the stream starts, failures are `Error` events followed by end-of-body.
+/// When no `[llm]` section was configured the completer is `None` and the
+/// request fails with `503` before any retrieval. Pre-stream failures (retrieval
+/// or completer setup) return a plain `500`; once the stream starts, failures
+/// are `Error` events followed by end-of-body.
 pub async fn handler(State(state): State<AppState>, Json(request): Json<ChatRequest>) -> Response {
+    let Some(completer) = state.completer.as_ref() else {
+        return (
+            StatusCode::SERVICE_UNAVAILABLE,
+            "chat is not configured: add [llm] to rig-rag.toml",
+        )
+            .into_response();
+    };
     let docs = match state
         .retriever
         .retrieve(&request.prompt, shared::DEFAULT_K, SearchMode::Hybrid)
@@ -71,7 +81,7 @@ pub async fn handler(State(state): State<AppState>, Json(request): Json<ChatRequ
     let prompt = build_prompt(&request.prompt, &docs);
     let history = cap_history(request.history);
 
-    let answer = match state.completer.complete(prompt, history).await {
+    let answer = match completer.complete(prompt, history).await {
         Ok(stream) => stream,
         Err(error) => return internal_error(error),
     };
@@ -82,7 +92,7 @@ pub async fn handler(State(state): State<AppState>, Json(request): Json<ChatRequ
             Ok::<_, Infallible>(to_event(match item {
                 Ok(event) => event,
                 Err(error) => ChatEvent::Error {
-                    message: error.to_string(),
+                    message: format!("{error:#}"),
                 },
             }))
         }));

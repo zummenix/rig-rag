@@ -11,3 +11,7 @@ active = "docs-bge-small-en-v1-5-87cfcb2b8b3d"
 [reranker]
 base_url = "https://api.aitunnel.ru/v1"
 model = "rerank-3"
+
+[llm]
+provider = "ollama"
+model = "mimo-v2.6:9b-mxfp8"

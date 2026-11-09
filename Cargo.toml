@@ -5,6 +5,9 @@ members = ["shared", "site"]
 name = "rig-rag"
 version = "0.1.0"
 edition = "2024"
+# `mock_server` is a second binary gated behind the `mock` feature; without a
+# default, `cargo run -- serve` is ambiguous. Documented commands use `rig-rag`.
+default-run = "rig-rag"
 
 [features]
 # Canned `Retriever`/`Completer` for the API e2e test and the Playwright
